@@ -100,22 +100,31 @@ router.post('/aggregate', apiKeyAuth, async (req, res) => {
 });
 
 async function checkMilestones() {
+  // Load already-sent milestones
+  const { rows: sentRows } = await pool.query(
+    `SELECT metadata FROM ucil_sync_state WHERE sync_key = 'milestones_sent'`
+  );
+  const sent = new Set(sentRows[0]?.metadata?.keys || []);
+
+  const newMilestones = [];
+
   // First qualified lead ever
   const { rows: firstQual } = await pool.query(`
-    SELECT agent_name, SUM(leads_qualified) AS total
+    SELECT agent_name, SUM(leads_qualified)::int AS total
     FROM ucil_agent_stats
     GROUP BY agent_name
     HAVING SUM(leads_qualified) = 1
   `);
 
   for (const row of firstQual) {
+    const key = `first_qual_${row.agent_name}`;
+    if (sent.has(key)) continue;
     const name = nameMap[row.agent_name] || row.agent_name;
-    await sendSlackAlert(formatMilestoneAlert(
-      name, 'First qualified lead! 🎯'
-    ));
+    await sendSlackAlert(formatMilestoneAlert(name, 'First qualified lead! 🎯'));
+    newMilestones.push(key);
   }
 
-  // 3+ day streak (consecutive days with calls)
+  // 3+ day streak (consecutive days with calls) — only alert for current active streaks
   const { rows: streaks } = await pool.query(`
     WITH daily AS (
       SELECT agent_name, stat_date,
@@ -123,7 +132,7 @@ async function checkMilestones() {
       FROM ucil_agent_stats
       WHERE calls_made > 0 AND stat_date >= CURRENT_DATE - INTERVAL '14 days'
     )
-    SELECT agent_name, COUNT(*) AS streak_days
+    SELECT agent_name, COUNT(*)::int AS streak_days, MAX(stat_date) AS streak_end
     FROM daily
     GROUP BY agent_name, grp
     HAVING COUNT(*) >= 3
@@ -131,10 +140,21 @@ async function checkMilestones() {
   `);
 
   for (const row of streaks) {
+    const key = `streak_${row.agent_name}_${row.streak_end}_${row.streak_days}`;
+    if (sent.has(key)) continue;
     const name = nameMap[row.agent_name] || row.agent_name;
-    await sendSlackAlert(formatMilestoneAlert(
-      name, `${row.streak_days}-day calling streak! 🔥`
-    ));
+    await sendSlackAlert(formatMilestoneAlert(name, `${row.streak_days}-day calling streak! 🔥`));
+    newMilestones.push(key);
+  }
+
+  // Persist newly sent milestones
+  if (newMilestones.length) {
+    const allKeys = [...sent, ...newMilestones];
+    await pool.query(`
+      INSERT INTO ucil_sync_state (sync_key, last_sync_at, metadata)
+      VALUES ('milestones_sent', NOW(), $1)
+      ON CONFLICT (sync_key) DO UPDATE SET metadata = $1, updated_at = NOW()
+    `, [JSON.stringify({ keys: allKeys })]);
   }
 }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { getScoreboard } from '../lib/api';
 
 export default function useScoreboard() {
@@ -7,7 +7,7 @@ export default function useScoreboard() {
   const [error, setError] = useState(null);
   const controllerRef = useRef(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
@@ -20,9 +20,12 @@ export default function useScoreboard() {
         if (err.name !== 'AbortError') setError(err.message);
       })
       .finally(() => setLoading(false));
-
-    return () => controller.abort();
   }, []);
 
-  return { data, loading, error };
+  useEffect(() => {
+    fetchData();
+    return () => controllerRef.current?.abort();
+  }, [fetchData]);
+
+  return { data, loading, error, refresh: fetchData };
 }

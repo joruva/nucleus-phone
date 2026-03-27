@@ -23,6 +23,8 @@ async function resolve(identifier) {
   if (!identifier) return unresolved(identifier);
 
   const type = classifyIdentifier(identifier);
+  if (type === 'unknown') return unresolved(identifier);
+
   let hsContact = null;
 
   // Step 1: HubSpot lookup
@@ -144,7 +146,7 @@ function classifyIdentifier(id) {
   // Has phone formatting characters (+, parens, dashes, dots, spaces) with 7+ digits
   const digits = id.replace(/\D/g, '');
   if (/^[+\d().\s-]+$/.test(id) && digits.length >= 7) return 'phone';
-  return 'hubspot_id';
+  return 'unknown';
 }
 
 /**
@@ -247,29 +249,38 @@ function unresolved(identifier) {
 }
 
 /**
- * Credit budget guard. Read-then-write pattern.
- * At <50 cockpit loads/day on a single Render instance, atomicity isn't critical.
+ * Atomic credit budget guard via UPDATE ... RETURNING.
+ * Prevents TOCTOU race on concurrent cockpit loads.
  */
 async function checkCreditBudget(service, dailyLimit = 10) {
   const syncKey = `${service}_daily_credits`;
-  const { rows } = await pool.query(
-    'SELECT metadata FROM ucil_sync_state WHERE sync_key = $1',
-    [syncKey]
-  );
-  const meta = rows[0]?.metadata || {};
   const today = new Date().toISOString().slice(0, 10);
 
-  if (meta.date === today && (meta.credits_used || 0) >= dailyLimit) {
-    console.log(`Credit budget exhausted for ${service}: ${meta.credits_used}/${dailyLimit}`);
+  // Atomic: increment if under budget, reset if new day. Returns new count.
+  const { rows } = await pool.query(`
+    INSERT INTO ucil_sync_state (sync_key, last_sync_at, metadata)
+    VALUES ($1, NOW(), jsonb_build_object('date', $2::text, 'credits_used', 1))
+    ON CONFLICT (sync_key) DO UPDATE SET
+      metadata = CASE
+        WHEN ucil_sync_state.metadata->>'date' = $2
+          AND (ucil_sync_state.metadata->>'credits_used')::int >= $3
+        THEN ucil_sync_state.metadata  -- over budget: don't increment
+        WHEN ucil_sync_state.metadata->>'date' = $2
+        THEN jsonb_build_object('date', $2::text, 'credits_used',
+             ((ucil_sync_state.metadata->>'credits_used')::int + 1))
+        ELSE jsonb_build_object('date', $2::text, 'credits_used', 1)  -- new day: reset
+      END,
+      updated_at = NOW()
+    RETURNING metadata
+  `, [syncKey, today, dailyLimit]);
+
+  const meta = rows[0]?.metadata || {};
+  const used = parseInt(meta.credits_used, 10) || 0;
+
+  if (used > dailyLimit) {
+    console.log(`Credit budget exhausted for ${service}: ${used}/${dailyLimit}`);
     return false;
   }
-
-  const newUsed = meta.date === today ? (meta.credits_used || 0) + 1 : 1;
-  await pool.query(`
-    INSERT INTO ucil_sync_state (sync_key, last_sync_at, metadata)
-    VALUES ($1, NOW(), $2)
-    ON CONFLICT (sync_key) DO UPDATE SET metadata = $2, updated_at = NOW()
-  `, [syncKey, JSON.stringify({ date: today, credits_used: newUsed })]);
 
   return true;
 }

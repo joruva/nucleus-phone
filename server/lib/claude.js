@@ -10,6 +10,15 @@ const FETCH_TIMEOUT = 6000; // 6 seconds
 
 // In-memory cache: Map<string, { data, expiresAt }>
 const cache = new Map();
+const MAX_CACHE_SIZE = 200;
+
+// Sweep expired entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, entry] of cache) {
+    if (now > entry.expiresAt) cache.delete(key);
+  }
+}, 5 * 60 * 1000).unref();
 
 const SYSTEM_PROMPT = `You are a rapport-first intelligence analyst for Joruva Industrial, a compressed air systems distributor. Your job is to prepare a sales caller with a pre-call briefing.
 
@@ -42,6 +51,11 @@ function getCached(key) {
 }
 
 function setCache(key, data) {
+  // Evict oldest if at capacity
+  if (cache.size >= MAX_CACHE_SIZE) {
+    const oldest = cache.keys().next().value;
+    cache.delete(oldest);
+  }
   cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL });
 }
 
@@ -63,6 +77,45 @@ function buildFallback(contactData) {
   };
 }
 
+/**
+ * Trim assembled data to only the fields Claude needs for rapport generation.
+ * Prevents sending raw DB rows and interaction arrays into the prompt.
+ */
+function trimForClaude(contactData) {
+  const history = contactData.interactionHistory;
+  return {
+    name: contactData.name,
+    email: contactData.email,
+    phone: contactData.phone,
+    company: contactData.company,
+    title: contactData.title,
+    linkedinUrl: contactData.linkedinUrl,
+    fitScore: contactData.fitScore,
+    fitReason: contactData.fitReason,
+    persona: contactData.persona,
+    pbContactData: contactData.pbContactData,
+    companyData: contactData.companyData,
+    icpScore: contactData.icpScore ? {
+      fit_score: contactData.icpScore.fit_score,
+      fit_reason: contactData.icpScore.fit_reason,
+      persona: contactData.icpScore.persona,
+    } : null,
+    interactionCount: history?.interactionCount || 0,
+    lastInteractionSummary: history?.lastInteractionSummary || null,
+    productsDiscussed: history?.productsDiscussed || [],
+    recentInteractions: (history?.interactions || []).slice(0, 5).map(i => ({
+      channel: i.channel, summary: i.summary, disposition: i.disposition,
+    })),
+    priorCallCount: contactData.priorCalls?.length || 0,
+    recentCallNotes: (contactData.priorCalls || []).slice(0, 3).map(c => ({
+      disposition: c.disposition, qualification: c.qualification, notes: c.notes,
+    })),
+    emailEngagement: (contactData.emailEngagement || []).slice(0, 5).map(e => ({
+      event_type: e.event_type, campaign_name: e.campaign_name,
+    })),
+  };
+}
+
 async function generateRapportIntel(contactData) {
   const key = cacheKey(contactData);
   const cached = getCached(key);
@@ -76,6 +129,7 @@ async function generateRapportIntel(contactData) {
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+  const trimmed = trimForClaude(contactData);
 
   try {
     const resp = await fetch(ANTHROPIC_URL, {
@@ -92,7 +146,7 @@ async function generateRapportIntel(contactData) {
         system: SYSTEM_PROMPT,
         messages: [{
           role: 'user',
-          content: `Generate a pre-call briefing for this contact:\n\n${JSON.stringify(contactData, null, 2)}`,
+          content: `Generate a pre-call briefing for this contact:\n\n${JSON.stringify(trimmed, null, 2)}`,
         }],
       }),
     });

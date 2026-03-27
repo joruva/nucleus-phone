@@ -47,13 +47,13 @@ async function initSchema() {
     `);
     console.log('nucleus_phone_calls table ready');
 
-    // Verify shared tables from UCIL exist (same Postgres, different service creates them)
+    // Check if UCIL's customer_interactions table exists (same Postgres, different service creates it)
     const { rows } = await client.query("SELECT to_regclass('public.customer_interactions')");
     if (!rows[0].to_regclass) {
-      console.error('FATAL: customer_interactions table missing — UCIL must create it first');
-      process.exit(1);
+      console.warn('WARNING: customer_interactions table missing — cockpit/sync features will fail until UCIL deploys');
+    } else {
+      console.log('customer_interactions table verified');
     }
-    console.log('customer_interactions table verified');
 
     // Cockpit tables
     await client.query(`

@@ -56,6 +56,7 @@ async function firefliesQuery(query, variables) {
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({ query, variables }),
+    signal: AbortSignal.timeout(30000),
   });
 
   const data = await res.json();

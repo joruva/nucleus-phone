@@ -64,7 +64,13 @@ async function reverseSearch({ phone, firstName, lastName, company }) {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
-    if (!pollResp.ok) continue;
+    if (!pollResp.ok) {
+      // Fatal errors: fail fast instead of polling until timeout
+      if (pollResp.status === 401 || pollResp.status === 403 || pollResp.status === 404) {
+        throw new Error(`Dropcontact poll fatal: ${pollResp.status}`);
+      }
+      continue; // 429, 500, 503 etc — retriable
+    }
 
     const result = await pollResp.json();
     if (!result.success) continue;
