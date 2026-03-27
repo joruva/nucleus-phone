@@ -8,6 +8,7 @@ const {
   createConference, getConference, updateConference,
   removeConference, listActiveConferences, claimLeadDial,
 } = require('../lib/conference');
+const { webhookLogger } = require('../middleware/webhook-logger');
 
 const router = Router();
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
@@ -196,7 +197,7 @@ router.post('/end', apiKeyAuth, async (req, res) => {
 });
 
 // POST /api/call/status — Twilio conference status callback
-router.post('/status', twilioWebhook, async (req, res) => {
+router.post('/status', webhookLogger, twilioWebhook, async (req, res) => {
   const {
     ConferenceSid, FriendlyName, StatusCallbackEvent,
     CallSid, Muted,

@@ -2,6 +2,7 @@ const { Router } = require('express');
 const twilio = require('twilio');
 const { pool } = require('../db');
 const { uploadToFireflies } = require('../lib/fireflies');
+const { webhookLogger } = require('../middleware/webhook-logger');
 
 const router = Router();
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
@@ -11,7 +12,7 @@ const twilioWebhook = twilio.webhook({
 });
 
 // POST /api/call/recording-status — Twilio recording status callback
-router.post('/', twilioWebhook, async (req, res) => {
+router.post('/', webhookLogger, twilioWebhook, async (req, res) => {
   const {
     RecordingUrl, RecordingSid, RecordingDuration, ConferenceSid,
   } = req.body;
