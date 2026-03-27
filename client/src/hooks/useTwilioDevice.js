@@ -75,6 +75,10 @@ export default function useTwilioDevice(identity) {
 
     activeCall.on('accept', () => setStatus('connected'));
 
+    activeCall.on('mute', (isMuted) => {
+      setMuted(isMuted);
+    });
+
     activeCall.on('disconnect', () => {
       setStatus('disconnected');
       setCall(null);

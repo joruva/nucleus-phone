@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { initiateCall, joinCall } from '../lib/api';
+import { initiateCall, joinCall, endCall } from '../lib/api';
 
 export default function useCallState(twilioHook) {
   const { makeCall, hangUp, status } = twilioHook;
@@ -75,9 +75,14 @@ export default function useCallState(twilioHook) {
   }, [makeCall]);
 
   const endCurrentCall = useCallback(() => {
+    // If primary caller (not shadow join), end the entire conference
+    // so shadow joiners get disconnected too
+    if (callData?.conferenceName && !callData?.joined) {
+      endCall(callData.conferenceName).catch(() => {});
+    }
     hangUp();
     // callData preserved for disposition screen
-  }, [hangUp]);
+  }, [hangUp, callData]);
 
   const clearCallData = useCallback(() => {
     setCallData(null);
