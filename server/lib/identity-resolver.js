@@ -2,13 +2,15 @@
  * lib/identity-resolver.js — Phone/email/ID → unified ResolvedIdentity.
  *
  * Steps 1-2 (free): HubSpot + PB contacts.
- * Steps 3-4 (credit-gated): Apollo + Dropcontact — added in Bead 9.
+ * Steps 3-4 (credit-gated): Apollo + Dropcontact.
  */
 
 const { pool } = require('../db');
 const { normalizePhone } = require('./phone');
 const { normalizeCompanyName } = require('./company-normalizer');
 const { findContactByPhone, getContact, searchContacts } = require('./hubspot');
+const { matchPerson } = require('./apollo');
+const { reverseSearch } = require('./dropcontact');
 
 /**
  * Resolve an identifier (phone, email, or HubSpot contact ID) into a
@@ -52,18 +54,70 @@ async function resolve(identifier) {
     }
   }
 
-  if (!hsContact && !pbData) return unresolved(identifier);
+  // Step 3: Apollo people match (credit-gated, only if name known but need more data)
+  let apolloData = null;
+  if (name && company && !pbData?.linkedinUrl) {
+    try {
+      if (await checkCreditBudget('apollo')) {
+        const nameParts = name.split(/\s+/);
+        const person = await matchPerson({
+          firstName: nameParts[0],
+          lastName: nameParts.slice(1).join(' '),
+          organization: company,
+          email: props.email || undefined,
+        });
+        if (person) {
+          apolloData = {
+            linkedinUrl: person.linkedin_url || null,
+            title: person.title || null,
+            email: person.email || null,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn('Identity resolver: Apollo match failed:', err.message);
+    }
+  }
+
+  // Step 4: Dropcontact reverse search (credit-gated, only if no email from Steps 1-3)
+  let dropcontactEmail = null;
+  const resolvedEmail = props.email || apolloData?.email || null;
+  if (!resolvedEmail && phone && name) {
+    try {
+      if (await checkCreditBudget('dropcontact')) {
+        const nameParts = name.split(/\s+/);
+        const dc = await reverseSearch({
+          phone,
+          firstName: nameParts[0],
+          lastName: nameParts.slice(1).join(' '),
+          company: company || undefined,
+        });
+        dropcontactEmail = dc.email;
+      }
+    } catch (err) {
+      console.warn('Identity resolver: Dropcontact search failed:', err.message);
+    }
+  }
+
+  if (!hsContact && !pbData && !apolloData && !dropcontactEmail) {
+    return unresolved(identifier);
+  }
+
+  const source = hsContact ? 'hubspot'
+    : pbData ? 'pb_contacts'
+    : apolloData ? 'apollo'
+    : 'dropcontact';
 
   return {
     resolved: true,
     hubspotContactId: hsContact?.id || null,
     hubspotCompanyId: props.associatedcompanyid || null,
     name,
-    email: props.email || null,
+    email: resolvedEmail || dropcontactEmail || null,
     phone,
     company,
-    title: pbData?.title || props.jobtitle || null,
-    linkedinUrl: pbData?.linkedinUrl || null,
+    title: pbData?.title || apolloData?.title || props.jobtitle || null,
+    linkedinUrl: pbData?.linkedinUrl || apolloData?.linkedinUrl || null,
     profileImage: pbData?.profileImage || null,
     pbContactData: pbData ? {
       summary: pbData.summary,
@@ -75,7 +129,7 @@ async function resolve(identifier) {
     fitScore: props.joruva_fit_score || null,
     fitReason: props.joruva_fit_reason || null,
     persona: props.joruva_persona || null,
-    source: hsContact ? 'hubspot' : 'pb_contacts',
+    source,
   };
 }
 
@@ -190,6 +244,34 @@ function unresolved(identifier) {
     persona: null,
     source: 'unknown',
   };
+}
+
+/**
+ * Credit budget guard. Read-then-write pattern.
+ * At <50 cockpit loads/day on a single Render instance, atomicity isn't critical.
+ */
+async function checkCreditBudget(service, dailyLimit = 10) {
+  const syncKey = `${service}_daily_credits`;
+  const { rows } = await pool.query(
+    'SELECT metadata FROM ucil_sync_state WHERE sync_key = $1',
+    [syncKey]
+  );
+  const meta = rows[0]?.metadata || {};
+  const today = new Date().toISOString().slice(0, 10);
+
+  if (meta.date === today && (meta.credits_used || 0) >= dailyLimit) {
+    console.log(`Credit budget exhausted for ${service}: ${meta.credits_used}/${dailyLimit}`);
+    return false;
+  }
+
+  const newUsed = meta.date === today ? (meta.credits_used || 0) + 1 : 1;
+  await pool.query(`
+    INSERT INTO ucil_sync_state (sync_key, last_sync_at, metadata)
+    VALUES ($1, NOW(), $2)
+    ON CONFLICT (sync_key) DO UPDATE SET metadata = $2, updated_at = NOW()
+  `, [syncKey, JSON.stringify({ date: today, credits_used: newUsed })]);
+
+  return true;
 }
 
 module.exports = { resolve };
