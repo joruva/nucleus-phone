@@ -1,4 +1,15 @@
+const { normalizePhone } = require('./phone');
+
 const HUBSPOT_BASE = 'https://api.hubapi.com';
+const MAX_RETRIES = 3;
+
+// CONTACT_PROPERTIES must remain a module-level constant — never user-supplied.
+const CONTACT_PROPERTIES = [
+  'firstname', 'lastname', 'company', 'phone', 'mobilephone',
+  'email', 'jobtitle', 'city', 'state', 'hs_lead_status',
+  'notes_last_updated', 'associatedcompanyid',
+  'joruva_fit_score', 'joruva_fit_reason', 'joruva_persona',
+].join(',');
 
 function headers() {
   return {
@@ -7,11 +18,31 @@ function headers() {
   };
 }
 
-const CONTACT_PROPERTIES = [
-  'firstname', 'lastname', 'company', 'phone', 'mobilephone',
-  'email', 'jobtitle', 'city', 'state', 'hs_lead_status',
-  'notes_last_updated',
-].join(',');
+async function hubspotFetch(path, options = {}, _retries = 0) {
+  const url = `${HUBSPOT_BASE}${path}`;
+  const resp = await fetch(url, {
+    ...options,
+    headers: { ...headers(), ...options.headers },
+  });
+
+  if (resp.status === 429) {
+    if (_retries >= MAX_RETRIES) {
+      throw new Error(`HubSpot rate limited after ${MAX_RETRIES} retries: ${path}`);
+    }
+    const retryAfter = Math.max(1, parseInt(resp.headers.get('retry-after') || '2', 10));
+    await new Promise(r => setTimeout(r, retryAfter * 1000));
+    return hubspotFetch(path, options, _retries + 1);
+  }
+
+  if (!resp.ok) {
+    const body = await resp.text();
+    const err = new Error(`HubSpot ${resp.status}: ${body.substring(0, 200)}`);
+    err.status = resp.status;
+    throw err;
+  }
+
+  return resp.status === 204 ? null : resp.json();
+}
 
 async function searchContacts(query, limit = 50, after) {
   const body = {
@@ -20,44 +51,23 @@ async function searchContacts(query, limit = 50, after) {
     limit,
     ...(after && { after }),
   };
+  if (query) body.query = query;
 
-  if (query) {
-    body.query = query;
-  }
-
-  const res = await fetch(`${HUBSPOT_BASE}/crm/v3/objects/contacts/search`, {
+  return hubspotFetch('/crm/v3/objects/contacts/search', {
     method: 'POST',
-    headers: headers(),
     body: JSON.stringify(body),
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HubSpot search failed: ${res.status} ${text}`);
-  }
-
-  return res.json();
 }
 
 async function getContact(contactId) {
-  const res = await fetch(
-    `${HUBSPOT_BASE}/crm/v3/objects/contacts/${contactId}?properties=${CONTACT_PROPERTIES}`,
-    { headers: headers() }
+  return hubspotFetch(
+    `/crm/v3/objects/contacts/${contactId}?properties=${CONTACT_PROPERTIES}`
   );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HubSpot get contact failed: ${res.status} ${text}`);
-  }
-
-  return res.json();
 }
 
 async function addNoteToContact(contactId, noteBody) {
-  // Create a note engagement
-  const res = await fetch(`${HUBSPOT_BASE}/crm/v3/objects/notes`, {
+  return hubspotFetch('/crm/v3/objects/notes', {
     method: 'POST',
-    headers: headers(),
     body: JSON.stringify({
       properties: {
         hs_timestamp: new Date().toISOString(),
@@ -71,13 +81,109 @@ async function addNoteToContact(contactId, noteBody) {
       ],
     }),
   });
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`HubSpot add note failed: ${res.status} ${text}`);
-  }
-
-  return res.json();
 }
 
-module.exports = { searchContacts, getContact, addNoteToContact };
+/**
+ * Search for contact by phone/mobilephone with EQ + CONTAINS_TOKEN fallback.
+ */
+async function findContactByPhone(phone) {
+  const normalized = normalizePhone(phone);
+  if (!normalized) return null;
+
+  const last7 = normalized.length >= 7 ? normalized.slice(-7) : null;
+  const filters = [
+    { propertyName: 'phone', operator: 'EQ', value: normalized },
+    { propertyName: 'mobilephone', operator: 'EQ', value: normalized },
+    ...(last7 ? [
+      { propertyName: 'phone', operator: 'CONTAINS_TOKEN', value: last7 },
+      { propertyName: 'mobilephone', operator: 'CONTAINS_TOKEN', value: last7 },
+    ] : []),
+  ];
+
+  for (const filter of filters) {
+    const result = await hubspotFetch('/crm/v3/objects/contacts/search', {
+      method: 'POST',
+      body: JSON.stringify({
+        filterGroups: [{ filters: [filter] }],
+        properties: CONTACT_PROPERTIES.split(','),
+        limit: 1,
+      }),
+    });
+    if (result.total > 0) return result.results[0];
+  }
+
+  return null;
+}
+
+/**
+ * Create or update a HubSpot contact. Returns { id, isNew }.
+ */
+async function upsertContact(lead, { ucilSource = 'nucleus_phone' } = {}) {
+  const existing = await findContactByPhone(lead.phone);
+
+  const nameParts = (lead.name || '').split(' ');
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.slice(1).join(' ') || '';
+  const props = {
+    ...(firstName && { firstname: firstName }),
+    ...(lastName && { lastname: lastName }),
+    ...(lead.email && { email: lead.email }),
+    ...(lead.phone && { phone: lead.phone }),
+    ...(lead.company && { company: lead.company }),
+    ucil_source: ucilSource,
+  };
+
+  if (existing) {
+    await hubspotFetch(`/crm/v3/objects/contacts/${existing.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ properties: props }),
+    });
+    return { id: existing.id, isNew: false };
+  }
+
+  const created = await hubspotFetch('/crm/v3/objects/contacts', {
+    method: 'POST',
+    body: JSON.stringify({ properties: props }),
+  });
+  return { id: created.id, isNew: true };
+}
+
+/**
+ * Create a deal associated with a contact.
+ */
+async function createDeal({ contactId, dealName, notes, stage, ucilSource = 'nucleus_phone' }) {
+  const deal = await hubspotFetch('/crm/v3/objects/deals', {
+    method: 'POST',
+    body: JSON.stringify({
+      properties: {
+        dealname: dealName,
+        pipeline: 'default',
+        dealstage: stage || 'appointmentscheduled',
+        description: notes || '',
+        ucil_source: ucilSource,
+      },
+    }),
+  });
+
+  if (contactId) {
+    await hubspotFetch(
+      `/crm/v3/objects/deals/${deal.id}/associations/contacts/${contactId}/deal_to_contact`,
+      { method: 'PUT' }
+    );
+  }
+
+  return deal;
+}
+
+/**
+ * Fetch company properties by ID.
+ */
+async function getCompany(companyId) {
+  const props = 'name,domain,industry,city,state,country,numberofemployees,company_vernacular';
+  return hubspotFetch(`/crm/v3/objects/companies/${companyId}?properties=${props}`);
+}
+
+module.exports = {
+  searchContacts, getContact, addNoteToContact,
+  findContactByPhone, upsertContact, createDeal, getCompany,
+};

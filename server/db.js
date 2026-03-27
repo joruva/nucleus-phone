@@ -46,6 +46,14 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_npc_created ON nucleus_phone_calls(created_at DESC);
     `);
     console.log('nucleus_phone_calls table ready');
+
+    // Verify shared tables from UCIL exist (same Postgres, different service creates them)
+    const { rows } = await client.query("SELECT to_regclass('public.customer_interactions')");
+    if (!rows[0].to_regclass) {
+      console.error('FATAL: customer_interactions table missing — UCIL must create it first');
+      process.exit(1);
+    }
+    console.log('customer_interactions table verified');
   } finally {
     client.release();
   }
