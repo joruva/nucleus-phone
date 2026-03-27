@@ -14,7 +14,6 @@ const ROLES = {
   ryann: 'caller',
   tom: 'admin',
   alex: 'caller',
-  britt: 'viewer',
 };
 
 export default function App() {

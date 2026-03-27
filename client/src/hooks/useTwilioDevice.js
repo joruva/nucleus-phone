@@ -78,6 +78,9 @@ export default function useTwilioDevice(identity) {
     activeCall.on('disconnect', () => {
       setStatus('disconnected');
       setCall(null);
+      // Reset to ready after a brief pause so Dialer can detect 'disconnected'
+      // and navigate to CallComplete before we flip back
+      setTimeout(() => setStatus('ready'), 1500);
     });
 
     activeCall.on('cancel', () => {

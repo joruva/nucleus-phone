@@ -154,7 +154,7 @@ export default function CallComplete({ callState, identity }) {
       {/* Action buttons */}
       <div className="flex gap-3 pb-4">
         <button
-          onClick={() => handleSave(false)}
+          onClick={handleSave}
           disabled={!disposition || saving}
           className="flex-1 py-3 rounded-lg bg-jv-blue text-white font-semibold disabled:opacity-40 hover:bg-blue-700 transition-colors"
         >

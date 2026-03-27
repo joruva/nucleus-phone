@@ -27,15 +27,19 @@ function formatDate(dateStr) {
 export default function History({ identity, role }) {
   const [calls, setCalls] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(null);
   const [filter, setFilter] = useState(role === 'admin' ? '' : identity);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await getCallHistory({ caller: filter || undefined, limit: 50 });
       setCalls(data.calls || []);
-    } catch (_) { /* ignore */ }
+    } catch (err) {
+      setError('Failed to load call history');
+    }
     setLoading(false);
   }, [filter]);
 
@@ -61,7 +65,9 @@ export default function History({ identity, role }) {
 
       {loading && <p className="text-center text-jv-muted py-8">Loading...</p>}
 
-      {!loading && calls.length === 0 && (
+      {error && <p className="text-center text-jv-red py-8">{error}</p>}
+
+      {!loading && !error && calls.length === 0 && (
         <p className="text-center text-jv-muted py-8">No calls yet</p>
       )}
 
