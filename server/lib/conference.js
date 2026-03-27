@@ -13,7 +13,16 @@ function createConference(conferenceName, data) {
     contactId: data.contactId,
     dbRowId: data.dbRowId,
     participants: [],
+    leadDialed: false,
   });
+}
+
+// Atomically claim the right to dial the lead. Returns true only once.
+function claimLeadDial(conferenceName) {
+  const conf = activeConferences.get(conferenceName);
+  if (!conf || conf.leadDialed) return false;
+  conf.leadDialed = true;
+  return true;
 }
 
 function getConference(conferenceName) {
@@ -63,4 +72,5 @@ module.exports = {
   updateConference,
   removeConference,
   listActiveConferences,
+  claimLeadDial,
 };

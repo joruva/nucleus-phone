@@ -6,7 +6,7 @@ const { client } = require('../lib/twilio');
 const { apiKeyAuth } = require('../middleware/auth');
 const {
   createConference, getConference, updateConference,
-  removeConference, listActiveConferences,
+  removeConference, listActiveConferences, claimLeadDial,
 } = require('../lib/conference');
 
 const router = Router();
@@ -65,7 +65,7 @@ async function dialLeadWhenReady(conferenceName, leadPhone, dbRowId) {
 
     const conf = getConference(conferenceName);
     if (!conf) return; // call was cancelled or cleaned up
-    if (conf.conferenceSid) return; // status callback already handled it
+    if (conf.leadDialed) return; // status callback already dialed the lead
 
     try {
       const conferences = await client.conferences.list({
@@ -77,6 +77,7 @@ async function dialLeadWhenReady(conferenceName, leadPhone, dbRowId) {
       if (conferences.length === 0) continue;
 
       const sid = conferences[0].sid;
+      if (!claimLeadDial(conferenceName)) return; // callback beat us
       updateConference(conferenceName, { conferenceSid: sid });
 
       pool.query(
@@ -210,7 +211,7 @@ router.post('/status', twilioWebhook, async (req, res) => {
       [ConferenceSid, FriendlyName]
     ).catch((err) => console.error('Failed to persist conference_sid:', err.message));
 
-    if (conf.leadPhone) {
+    if (conf.leadPhone && claimLeadDial(FriendlyName)) {
       try {
         await client.conferences(ConferenceSid).participants.create({
           from: process.env.NUCLEUS_PHONE_NUMBER,
@@ -219,7 +220,7 @@ router.post('/status', twilioWebhook, async (req, res) => {
           beep: false,
           endConferenceOnExit: true,
         });
-        console.log(`Dialed ${conf.leadPhone} into conference ${FriendlyName}`);
+        console.log(`[callback] Dialed ${conf.leadPhone} into conference ${FriendlyName}`);
       } catch (err) {
         console.error('Failed to dial lead into conference:', err.message);
       }
