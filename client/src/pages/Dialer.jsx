@@ -12,7 +12,7 @@ const STATUS_TEXT = {
 export default function Dialer({ identity, twilioHook, callState }) {
   const navigate = useNavigate();
   const { status, muted, toggleMute, sendDigits, call } = twilioHook;
-  const { callData, elapsed, endCurrentCall } = callState;
+  const { callData, elapsed, endCurrentCall, clearCallData } = callState;
   const [showKeypad, setShowKeypad] = useState(false);
   const barHeights = useMemo(() => [0, 1, 2, 3, 4].map(() => 12 + Math.random() * 20), []);
 
