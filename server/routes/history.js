@@ -3,12 +3,20 @@ const { apiKeyAuth } = require('../middleware/auth');
 const { pool } = require('../db');
 const { sendSlackAlert, formatCallAlert } = require('../lib/slack');
 const { addNoteToContact } = require('../lib/hubspot');
+const { formatDuration } = require('../lib/format');
 
 const router = Router();
 
+const CALL_COLUMNS = `id, created_at, conference_name, caller_identity, lead_phone,
+  lead_name, lead_company, hubspot_contact_id, direction, status, duration_seconds,
+  disposition, qualification, products_discussed, notes, recording_url,
+  recording_duration, fireflies_uploaded`;
+
 // GET /api/history — list past calls
 router.get('/', apiKeyAuth, async (req, res) => {
-  const { caller, disposition, limit = 25, offset = 0 } = req.query;
+  const { caller, disposition } = req.query;
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 200);
+  const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
   let where = ['status = \'completed\''];
   const params = [];
@@ -23,21 +31,20 @@ router.get('/', apiKeyAuth, async (req, res) => {
     params.push(disposition);
   }
 
-  params.push(parseInt(limit, 10));
-  params.push(parseInt(offset, 10));
+  const whereClause = where.join(' AND ');
 
   try {
     const result = await pool.query(
-      `SELECT * FROM nucleus_phone_calls
-       WHERE ${where.join(' AND ')}
+      `SELECT ${CALL_COLUMNS} FROM nucleus_phone_calls
+       WHERE ${whereClause}
        ORDER BY created_at DESC
        LIMIT $${idx++} OFFSET $${idx}`,
-      params
+      [...params, limit, offset]
     );
 
     const countResult = await pool.query(
-      `SELECT COUNT(*) FROM nucleus_phone_calls WHERE ${where.join(' AND ')}`,
-      params.slice(0, -2)
+      `SELECT COUNT(*) FROM nucleus_phone_calls WHERE ${whereClause}`,
+      params
     );
 
     res.json({
@@ -52,10 +59,15 @@ router.get('/', apiKeyAuth, async (req, res) => {
 
 // GET /api/history/:id — single call detail
 router.get('/:id', apiKeyAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'id must be an integer' });
+  }
+
   try {
     const result = await pool.query(
-      'SELECT * FROM nucleus_phone_calls WHERE id = $1',
-      [req.params.id]
+      `SELECT ${CALL_COLUMNS} FROM nucleus_phone_calls WHERE id = $1`,
+      [id]
     );
 
     if (result.rows.length === 0) {
@@ -71,7 +83,12 @@ router.get('/:id', apiKeyAuth, async (req, res) => {
 
 // POST /api/history/:id/disposition — set disposition + notes
 router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
-  const { disposition, qualification, notes, products_discussed, callbackRequested } = req.body;
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'id must be an integer' });
+  }
+
+  const { disposition, qualification, notes, products_discussed } = req.body;
 
   if (!disposition) {
     return res.status(400).json({ error: 'disposition required' });
@@ -83,13 +100,13 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
        SET disposition = $1, qualification = $2, notes = $3,
            products_discussed = $4
        WHERE id = $5
-       RETURNING *`,
+       RETURNING ${CALL_COLUMNS}`,
       [
         disposition,
         qualification || null,
         notes || null,
         JSON.stringify(products_discussed || []),
-        req.params.id,
+        id,
       ]
     );
 
@@ -99,7 +116,7 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
 
     const call = result.rows[0];
 
-    // Slack alert for hot/warm leads
+    // Slack alert for hot/warm leads (async, non-blocking)
     if (qualification === 'hot' || qualification === 'warm') {
       const alert = formatCallAlert({
         disposition, qualification, notes,
@@ -110,18 +127,21 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
         productsDiscussed: products_discussed,
       });
 
-      sendSlackAlert(alert).then((sent) => {
-        if (sent) {
-          pool.query('UPDATE nucleus_phone_calls SET slack_notified = TRUE WHERE id = $1', [call.id]);
-        }
-      });
+      sendSlackAlert(alert)
+        .then((sent) => {
+          if (sent) {
+            pool.query('UPDATE nucleus_phone_calls SET slack_notified = TRUE WHERE id = $1', [call.id])
+              .catch((err) => console.error('Failed to update slack_notified flag:', err.message));
+          }
+        })
+        .catch((err) => console.error('Slack alert failed:', err.message));
     }
 
-    // Sync to HubSpot — add note to contact timeline
+    // Sync to HubSpot — add note to contact timeline (async, non-blocking)
     if (call.hubspot_contact_id) {
       const noteBody = [
         `📞 Outbound call by ${call.caller_identity}`,
-        `Duration: ${Math.floor((call.duration_seconds || 0) / 60)}:${((call.duration_seconds || 0) % 60).toString().padStart(2, '0')}`,
+        `Duration: ${formatDuration(call.duration_seconds)}`,
         `Disposition: ${disposition}${qualification ? ` (${qualification})` : ''}`,
         ...(products_discussed?.length ? [`Products: ${products_discussed.join(', ')}`] : []),
         ...(notes ? [`Notes: ${notes}`] : []),
@@ -129,7 +149,8 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
 
       addNoteToContact(call.hubspot_contact_id, noteBody)
         .then(() => {
-          pool.query('UPDATE nucleus_phone_calls SET hubspot_synced = TRUE WHERE id = $1', [call.id]);
+          pool.query('UPDATE nucleus_phone_calls SET hubspot_synced = TRUE WHERE id = $1', [call.id])
+            .catch((err) => console.error('Failed to update hubspot_synced flag:', err.message));
         })
         .catch((err) => console.error('HubSpot sync failed:', err.message));
     }

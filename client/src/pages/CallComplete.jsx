@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveDisposition } from '../lib/api';
+import { formatDuration } from '../lib/format';
 
 const DISPOSITIONS = [
   { value: 'connected', label: 'Connected', color: 'bg-jv-green/20 text-jv-green border-jv-green/30' },
@@ -19,13 +20,6 @@ const QUALIFICATIONS = [
 ];
 
 const PRODUCTS = ['JRS-7.5E', 'JRS-10E', 'JRS-15E', 'JRS-20E', 'Other'];
-
-function formatDuration(seconds) {
-  if (!seconds) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 export default function CallComplete({ callState, identity }) {
   const navigate = useNavigate();

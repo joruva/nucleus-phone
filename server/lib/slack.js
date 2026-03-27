@@ -1,3 +1,5 @@
+const { formatDuration } = require('./format');
+
 async function sendSlackAlert(message) {
   const webhookUrl = process.env.SLACK_SALES_WEBHOOK_URL;
   if (!webhookUrl) {
@@ -51,13 +53,6 @@ function formatCallAlert(callData) {
       }] : []),
     ],
   };
-}
-
-function formatDuration(seconds) {
-  if (!seconds) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
 module.exports = { sendSlackAlert, formatCallAlert };

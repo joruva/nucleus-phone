@@ -1,11 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-}
+import { formatTime } from '../lib/format';
 
 const STATUS_TEXT = {
   connecting: 'Connecting...',
@@ -16,9 +11,8 @@ const STATUS_TEXT = {
 
 export default function Dialer({ identity, twilioHook, callState }) {
   const navigate = useNavigate();
-  const { status, toggleMute, sendDigits, call } = twilioHook;
+  const { status, muted, toggleMute, sendDigits, call } = twilioHook;
   const { callData, elapsed, endCurrentCall } = callState;
-  const [muted, setMuted] = useState(false);
   const [showKeypad, setShowKeypad] = useState(false);
 
   // Navigate to Call Complete when disconnected
@@ -41,7 +35,6 @@ export default function Dialer({ identity, twilioHook, callState }) {
 
   function handleMute() {
     toggleMute();
-    setMuted(!muted);
   }
 
   function handleDigit(digit) {

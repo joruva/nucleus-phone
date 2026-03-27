@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getCallHistory } from '../lib/api';
+import { formatDuration } from '../lib/format';
 
 const DISP_COLORS = {
   connected: 'bg-jv-green/20 text-jv-green',
@@ -12,13 +13,6 @@ const DISP_COLORS = {
   wrong_number: 'bg-jv-red/20 text-jv-red',
   gatekeeper: 'bg-gray-500/20 text-gray-400',
 };
-
-function formatDuration(seconds) {
-  if (!seconds) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
 
 function formatDate(dateStr) {
   const d = new Date(dateStr);

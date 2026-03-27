@@ -99,17 +99,26 @@ export default function useTwilioDevice(identity) {
     if (call) call.disconnect();
   }, [call]);
 
+  const [muted, setMuted] = useState(false);
+
   const toggleMute = useCallback(() => {
     if (call) {
-      call.mute(!call.isMuted());
-      return !call.isMuted();
+      const newMuted = !muted;
+      call.mute(newMuted);
+      setMuted(newMuted);
+      return newMuted;
     }
     return false;
+  }, [call, muted]);
+
+  // Reset mute state when call ends
+  useEffect(() => {
+    if (!call) setMuted(false);
   }, [call]);
 
   const sendDigits = useCallback((digits) => {
     if (call) call.sendDigits(digits);
   }, [call]);
 
-  return { device, call, status, setStatus, makeCall, hangUp, toggleMute, sendDigits };
+  return { device, call, status, setStatus, muted, makeCall, hangUp, toggleMute, sendDigits };
 }

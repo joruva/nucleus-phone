@@ -12,12 +12,18 @@ const {
 const router = Router();
 const twilioWebhook = twilio.webhook({ validate: process.env.NODE_ENV === 'production' });
 
+const E164_RE = /^\+[1-9]\d{6,14}$/;
+
 // POST /api/call/initiate — start a new call
 router.post('/initiate', apiKeyAuth, async (req, res) => {
   const { to, contactName, companyName, contactId, callerIdentity } = req.body;
 
   if (!to || !callerIdentity) {
     return res.status(400).json({ error: 'to and callerIdentity required' });
+  }
+
+  if (!E164_RE.test(to)) {
+    return res.status(400).json({ error: 'to must be E.164 format (e.g. +16025551234)' });
   }
 
   const conferenceName = `nucleus-call-${uuidv4()}`;
@@ -81,7 +87,6 @@ router.post('/mute', apiKeyAuth, async (req, res) => {
 router.get('/active', apiKeyAuth, async (req, res) => {
   const conferences = listActiveConferences();
 
-  // Enrich with live participant data from Twilio
   const enriched = await Promise.all(
     conferences.map(async (conf) => {
       let participants = [];
@@ -143,8 +148,25 @@ router.post('/status', twilioWebhook, async (req, res) => {
 
   const conf = getConference(FriendlyName);
 
+  // On conference-start: save SID and dial the lead into the conference.
+  // This replaces the old sleep-and-poll pattern in voice.js.
   if (StatusCallbackEvent === 'conference-start' && conf) {
     updateConference(FriendlyName, { conferenceSid: ConferenceSid });
+
+    if (conf.leadPhone) {
+      try {
+        await client.conferences(ConferenceSid).participants.create({
+          from: process.env.NUCLEUS_PHONE_NUMBER,
+          to: conf.leadPhone,
+          earlyMedia: true,
+          beep: false,
+          endConferenceOnExit: true,
+        });
+        console.log(`Dialed ${conf.leadPhone} into conference ${FriendlyName}`);
+      } catch (err) {
+        console.error('Failed to dial lead into conference:', err.message);
+      }
+    }
   }
 
   if (StatusCallbackEvent === 'participant-join' && conf) {
