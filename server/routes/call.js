@@ -10,7 +10,11 @@ const {
 } = require('../lib/conference');
 
 const router = Router();
-const twilioWebhook = twilio.webhook({ validate: false });
+const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
+const twilioWebhook = twilio.webhook({
+  validate: process.env.NODE_ENV === 'production',
+  url: `${baseUrl}/api/call/status`,
+});
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 

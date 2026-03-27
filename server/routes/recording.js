@@ -4,7 +4,11 @@ const { pool } = require('../db');
 const { uploadToFireflies } = require('../lib/fireflies');
 
 const router = Router();
-const twilioWebhook = twilio.webhook({ validate: false });
+const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
+const twilioWebhook = twilio.webhook({
+  validate: process.env.NODE_ENV === 'production',
+  url: `${baseUrl}/api/call/recording-status`,
+});
 
 // POST /api/call/recording-status — Twilio recording status callback
 router.post('/', twilioWebhook, async (req, res) => {

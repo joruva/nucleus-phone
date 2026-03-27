@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const msal = require('@azure/msal-node');
 const jwt = require('jsonwebtoken');
+const { sessionAuth } = require('../middleware/auth');
 
 const router = Router();
 
@@ -107,20 +108,8 @@ router.get('/callback', async (req, res) => {
 });
 
 // GET /api/auth/me — return current user from session cookie
-router.get('/me', (req, res) => {
-  const token = req.cookies?.nucleus_session;
-  if (!token) return res.status(401).json({ error: 'Not authenticated' });
-
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET);
-    res.json({
-      identity: payload.identity,
-      role: payload.role,
-      email: payload.email,
-    });
-  } catch {
-    res.status(401).json({ error: 'Invalid session' });
-  }
+router.get('/me', sessionAuth, (req, res) => {
+  res.json(req.user);
 });
 
 // POST /api/auth/logout — clear session cookie

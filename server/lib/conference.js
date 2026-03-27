@@ -17,7 +17,8 @@ function createConference(conferenceName, data) {
   });
 }
 
-// Atomically claim the right to dial the lead. Returns true only once.
+// Single-tick claim: safe in Node.js because check-and-set runs synchronously
+// within one event loop tick. Returns true only for the first caller.
 function claimLeadDial(conferenceName) {
   const conf = activeConferences.get(conferenceName);
   if (!conf || conf.leadDialed) return false;

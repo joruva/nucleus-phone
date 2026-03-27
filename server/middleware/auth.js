@@ -14,14 +14,17 @@ function sessionAuth(req, res, next) {
   }
 }
 
-// API key auth (legacy — kept for programmatic/testing access)
+// Accepts API key OR session cookie. If an API key header is present,
+// it must be correct — a wrong key is a 401, not a silent fallback.
 function apiKeyAuth(req, res, next) {
   const key = req.headers['x-api-key'];
-  if (key && key === process.env.NUCLEUS_PHONE_API_KEY) {
-    return next();
+
+  if (key) {
+    if (key === process.env.NUCLEUS_PHONE_API_KEY) return next();
+    return res.status(401).json({ error: 'Invalid API key' });
   }
 
-  // Fall through to session auth
+  // No API key header — try session cookie
   return sessionAuth(req, res, next);
 }
 
