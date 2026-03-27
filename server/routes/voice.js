@@ -27,12 +27,13 @@ router.post('/', twilioWebhook, (req, res) => {
   // Default: "initiate" — caller enters conference.
   // Lead dialing happens in the conference-start status callback (call.js),
   // NOT here. This eliminates the race condition of polling for the conference SID.
+  const baseUrl = process.env.BASE_URL || 'https://nucleus-phone.onrender.com';
   const dial = twiml.dial({ callerId: process.env.NUCLEUS_PHONE_NUMBER });
   dial.conference({
     record: 'record-from-start',
-    recordingStatusCallback: '/api/call/recording-status',
+    recordingStatusCallback: `${baseUrl}/api/call/recording-status`,
     recordingStatusCallbackEvent: 'completed',
-    statusCallback: '/api/call/status',
+    statusCallback: `${baseUrl}/api/call/status`,
     statusCallbackEvent: 'start end join leave',
     startConferenceOnEnter: true,
     endConferenceOnExit: false,
