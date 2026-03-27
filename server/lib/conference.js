@@ -39,17 +39,23 @@ function listActiveConferences() {
   return result;
 }
 
-// Sweep stale conferences every 10 minutes (e.g. if conference-end webhook never fires)
-const STALE_MS = 4 * 60 * 60 * 1000; // 4 hours
+// Sweep stale conferences every 2 minutes.
+// A conference that never got a SID within 5 min is dead (webhook failed).
+// A conference older than 2 hours with no participants is abandoned.
+const STALE_NO_SID_MS = 5 * 60 * 1000;
+const STALE_MAX_MS = 2 * 60 * 60 * 1000;
 setInterval(() => {
   const now = Date.now();
   for (const [name, conf] of activeConferences) {
-    if (now - conf.startedAt.getTime() > STALE_MS) {
-      console.warn(`Removing stale conference: ${name} (started ${conf.startedAt.toISOString()})`);
+    const age = now - conf.startedAt.getTime();
+    const noSid = !conf.conferenceSid && age > STALE_NO_SID_MS;
+    const tooOld = age > STALE_MAX_MS;
+    if (noSid || tooOld) {
+      console.warn(`Removing stale conference: ${name} (age=${Math.round(age / 1000)}s, sid=${!!conf.conferenceSid})`);
       activeConferences.delete(name);
     }
   }
-}, 10 * 60 * 1000);
+}, 2 * 60 * 1000);
 
 module.exports = {
   createConference,

@@ -10,6 +10,11 @@ const { apiKeyAuth } = require('./middleware/auth');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Render terminates TLS at its reverse proxy — tell Express to trust
+// X-Forwarded-Proto so req.protocol returns 'https'. Without this,
+// Twilio webhook signature validation fails (signs with https, sees http).
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({
   origin: process.env.NODE_ENV === 'production'
