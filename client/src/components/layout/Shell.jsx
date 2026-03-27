@@ -50,7 +50,7 @@ export default function Shell({ identity, role, onLogout, deviceStatus, children
       </main>
 
       {/* Bottom nav */}
-      <nav className="flex border-t border-jv-border bg-jv-card safe-area-bottom">
+      <nav className="flex border-t border-jv-border bg-jv-card pb-[env(safe-area-inset-bottom)]">
         {tabs.map((tab) => {
           const active = location.pathname === tab.path;
           return (

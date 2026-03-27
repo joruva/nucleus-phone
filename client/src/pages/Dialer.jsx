@@ -25,10 +25,11 @@ export default function Dialer({ identity, twilioHook, callState }) {
   }, [status, callData, navigate]);
 
   // No call data — redirect
-  if (!callData) {
-    navigate('/');
-    return null;
-  }
+  useEffect(() => {
+    if (!callData) navigate('/');
+  }, [callData, navigate]);
+
+  if (!callData) return null;
 
   const contact = callData.contact;
   const props = contact?.properties || {};

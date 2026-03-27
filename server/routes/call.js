@@ -153,6 +153,12 @@ router.post('/status', twilioWebhook, async (req, res) => {
   if (StatusCallbackEvent === 'conference-start' && conf) {
     updateConference(FriendlyName, { conferenceSid: ConferenceSid });
 
+    // Persist conference_sid to DB immediately so recording callbacks can find the row
+    pool.query(
+      'UPDATE nucleus_phone_calls SET conference_sid = $1 WHERE conference_name = $2',
+      [ConferenceSid, FriendlyName]
+    ).catch((err) => console.error('Failed to persist conference_sid:', err.message));
+
     if (conf.leadPhone) {
       try {
         await client.conferences(ConferenceSid).participants.create({

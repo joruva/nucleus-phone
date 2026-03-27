@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { saveDisposition } from '../lib/api';
 import { formatDuration } from '../lib/format';
@@ -36,10 +36,11 @@ export default function CallComplete({ callState, identity }) {
   });
   const [saving, setSaving] = useState(false);
 
-  if (!callData) {
-    navigate('/');
-    return null;
-  }
+  useEffect(() => {
+    if (!callData) navigate('/');
+  }, [callData, navigate]);
+
+  if (!callData) return null;
 
   const props = callData.contact?.properties || {};
   const name = `${props.firstname || ''} ${props.lastname || ''}`.trim() || 'Unknown';
@@ -50,7 +51,7 @@ export default function CallComplete({ callState, identity }) {
     );
   }
 
-  async function handleSave(goToNext) {
+  async function handleSave() {
     if (!disposition) return;
     setSaving(true);
 

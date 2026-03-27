@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useContacts from '../hooks/useContacts';
 
@@ -34,10 +34,6 @@ export default function Contacts({ identity, callState, twilioStatus }) {
   useEffect(() => {
     fetchContacts('');
   }, [fetchContacts]);
-
-  const handleSearch = useCallback(() => {
-    fetchContacts(search);
-  }, [search, fetchContacts]);
 
   // Debounced search
   useEffect(() => {
