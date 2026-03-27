@@ -60,12 +60,18 @@ export default function useCallState(twilioHook) {
     setCallData((prev) => ({ ...prev, conferenceName, joined: true }));
     setElapsed(0);
 
-    await makeCall({
+    const activeCall = await makeCall({
       ConferenceName: conferenceName,
       CallerIdentity: identity,
       Action: 'join',
       Muted: muted ? 'true' : 'false',
     });
+
+    // Belt-and-suspenders: mute the browser mic directly via Voice SDK
+    // in case the TwiML muted attribute doesn't apply reliably
+    if (muted && activeCall) {
+      activeCall.mute(true);
+    }
   }, [makeCall]);
 
   const endCurrentCall = useCallback(() => {
