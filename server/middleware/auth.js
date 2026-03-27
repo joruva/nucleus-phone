@@ -8,7 +8,7 @@ function sessionAuth(req, res, next) {
   // State-changing requests via session cookie must include a custom header.
   // HTML forms cannot set custom headers, so this blocks CSRF from same-site
   // origins (sameSite:lax already blocks cross-site).
-  if (req.method !== 'GET' && !req.headers['x-requested-with']) {
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !req.headers['x-requested-with']) {
     return res.status(403).json({ error: 'Missing X-Requested-With header' });
   }
 

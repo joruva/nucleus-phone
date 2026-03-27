@@ -9,6 +9,7 @@ const {
   removeConference, listActiveConferences, claimLeadDial,
 } = require('../lib/conference');
 const { webhookLogger } = require('../middleware/webhook-logger');
+const { sendSlackAlert } = require('../lib/slack');
 
 const router = Router();
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
@@ -110,6 +111,9 @@ async function dialLeadWhenReady(conferenceName, leadPhone, dbRowId) {
     "UPDATE nucleus_phone_calls SET status = 'failed' WHERE id = $1 AND status != 'completed'",
     [dbRowId]
   ).catch((err) => console.error('Failed to mark call as failed:', err.message));
+  sendSlackAlert({
+    text: `:warning: Failed to connect lead ${leadPhone} — caller may be sitting in silence (${conferenceName})`,
+  }).catch(() => {});
 }
 
 // POST /api/call/join — admin joins an active conference
@@ -213,7 +217,12 @@ router.post('/status', webhookLogger, twilioWebhook, async (req, res) => {
   // On conference-start or first participant-join: save SID and dial the lead.
   // participant-join typically arrives ~800ms before conference-start, so we
   // trigger on whichever lands first. claimLeadDial() prevents double-dialing.
-  if ((StatusCallbackEvent === 'conference-start' || StatusCallbackEvent === 'participant-join') && conf && ConferenceSid) {
+  //
+  // The conferenceSid guard and claimLeadDial are both synchronous checks.
+  // Node processes HTTP requests sequentially within an event loop tick, so
+  // concurrent callbacks cannot interleave between the check and the update.
+  const shouldDialLead = ['conference-start', 'participant-join'].includes(StatusCallbackEvent);
+  if (shouldDialLead && conf && ConferenceSid) {
     if (!conf.conferenceSid) {
       updateConference(FriendlyName, { conferenceSid: ConferenceSid });
       pool.query(
