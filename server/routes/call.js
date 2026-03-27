@@ -8,7 +8,6 @@ const {
   createConference, getConference, updateConference,
   removeConference, listActiveConferences, claimLeadDial,
 } = require('../lib/conference');
-const { webhookLogger } = require('../middleware/webhook-logger');
 const { sendSlackAlert } = require('../lib/slack');
 
 const router = Router();
@@ -206,7 +205,7 @@ router.post('/end', apiKeyAuth, async (req, res) => {
 });
 
 // POST /api/call/status — Twilio conference status callback
-router.post('/status', webhookLogger, twilioWebhook, async (req, res) => {
+router.post('/status', twilioWebhook, async (req, res) => {
   const {
     ConferenceSid, FriendlyName, StatusCallbackEvent,
     CallSid, Muted,

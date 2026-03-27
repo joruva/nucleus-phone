@@ -2,7 +2,6 @@ const { Router } = require('express');
 const twilio = require('twilio');
 const { VoiceResponse } = require('../lib/twilio');
 const { getConference } = require('../lib/conference');
-const { webhookLogger } = require('../middleware/webhook-logger');
 
 const router = Router();
 
@@ -13,7 +12,7 @@ const twilioWebhook = twilio.webhook({
 });
 
 // POST /api/voice — TwiML webhook called by Twilio when PWA connects via Voice SDK
-router.post('/', webhookLogger, twilioWebhook, (req, res) => {
+router.post('/', twilioWebhook, (req, res) => {
   const { ConferenceName, Action, Muted } = req.body;
   const twiml = new VoiceResponse();
 
