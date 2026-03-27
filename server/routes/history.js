@@ -7,6 +7,7 @@ const { formatDuration } = require('../lib/format');
 
 const router = Router();
 
+// SAFETY: CALL_COLUMNS is a compile-time constant, never user input
 const CALL_COLUMNS = `id, created_at, conference_name, caller_identity, lead_phone,
   lead_name, lead_company, hubspot_contact_id, direction, status, duration_seconds,
   disposition, qualification, products_discussed, notes, recording_url,
