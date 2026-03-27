@@ -29,7 +29,7 @@ export default function History({ identity, role }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [expanded, setExpanded] = useState(null);
-  const [filter, setFilter] = useState(role === 'admin' ? '' : identity);
+  const [filter, setFilter] = useState(identity);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -49,18 +49,19 @@ export default function History({ identity, role }) {
     <div className="h-full overflow-y-auto scroll-container p-4">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold">Call History</h2>
-        {role === 'admin' && (
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="bg-jv-card border border-jv-border rounded-lg px-3 py-1.5 text-sm text-white"
-          >
-            <option value="">All callers</option>
-            <option value="ryann">Ryann</option>
-            <option value="tom">Tom</option>
-            <option value="alex">Alex</option>
-          </select>
-        )}
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          className="bg-jv-card border border-jv-border rounded-lg px-3 py-1.5 text-sm text-white"
+        >
+          <option value="">All callers</option>
+          <option value="tom">Tom</option>
+          <option value="paul">Paul</option>
+          <option value="kate">Kate</option>
+          <option value="britt">Britt</option>
+          <option value="ryann">Ryann</option>
+          <option value="alex">Alex</option>
+        </select>
       </div>
 
       {loading && <p className="text-center text-jv-muted py-8">Loading...</p>}
