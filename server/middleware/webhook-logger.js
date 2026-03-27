@@ -1,4 +1,5 @@
-// TEMPORARY diagnostic middleware — REMOVE after webhook reliability is confirmed.
+// TEMPORARY diagnostic middleware (added 2026-03-27, nucleus-phone-ggl).
+// REMOVE after webhook reliability is confirmed across ~20 production calls.
 //
 // Logs every inbound Twilio webhook request BEFORE signature validation.
 // This lets us distinguish "callback never arrived" from "callback arrived
