@@ -44,11 +44,62 @@ router.post('/initiate', apiKeyAuth, async (req, res) => {
     });
 
     res.json({ conferenceName, callId: dbRowId });
+
+    // Poll for the conference SID and dial the lead in.
+    // Status callbacks should handle this, but as a fallback we poll
+    // in case the callback is delayed or lost behind the proxy.
+    dialLeadWhenReady(conferenceName, to, dbRowId);
   } catch (err) {
     console.error('Call initiation failed:', err);
     res.status(500).json({ error: 'Failed to initiate call' });
   }
 });
+
+// Poll Twilio for the conference SID, then dial the lead in.
+// Retries every 1.5s for up to 15s. Exits early if the status
+// callback already handled it (conferenceSid already set).
+async function dialLeadWhenReady(conferenceName, leadPhone, dbRowId) {
+  const maxAttempts = 10;
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise((r) => setTimeout(r, 1500));
+
+    const conf = getConference(conferenceName);
+    if (!conf) return; // call was cancelled or cleaned up
+    if (conf.conferenceSid) return; // status callback already handled it
+
+    try {
+      const conferences = await client.conferences.list({
+        friendlyName: conferenceName,
+        status: 'in-progress',
+        limit: 1,
+      });
+
+      if (conferences.length === 0) continue;
+
+      const sid = conferences[0].sid;
+      updateConference(conferenceName, { conferenceSid: sid });
+
+      pool.query(
+        'UPDATE nucleus_phone_calls SET conference_sid = $1 WHERE id = $2',
+        [sid, dbRowId]
+      ).catch((err) => console.error('Failed to persist conference_sid:', err.message));
+
+      await client.conferences(sid).participants.create({
+        from: process.env.NUCLEUS_PHONE_NUMBER,
+        to: leadPhone,
+        earlyMedia: true,
+        beep: false,
+        endConferenceOnExit: true,
+      });
+
+      console.log(`[poll-fallback] Dialed ${leadPhone} into ${conferenceName}`);
+      return;
+    } catch (err) {
+      console.error(`[poll-fallback] Attempt ${i + 1} failed:`, err.message);
+    }
+  }
+  console.error(`[poll-fallback] Gave up dialing lead for ${conferenceName}`);
+}
 
 // POST /api/call/join — admin joins an active conference
 router.post('/join', apiKeyAuth, (req, res) => {
