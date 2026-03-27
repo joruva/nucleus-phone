@@ -7,6 +7,7 @@ import Dialer from './pages/Dialer';
 import CallComplete from './pages/CallComplete';
 import ActiveCalls from './pages/ActiveCalls';
 import History from './pages/History';
+import Cockpit from './pages/Cockpit';
 import useTwilioDevice from './hooks/useTwilioDevice';
 import useCallState from './hooks/useCallState';
 
@@ -94,6 +95,16 @@ export default function App() {
             }
           />
         )}
+        <Route
+          path="/cockpit/:id"
+          element={
+            <Cockpit
+              identity={identity}
+              callState={callState}
+              twilioStatus={twilioHook.status}
+            />
+          }
+        />
         <Route path="/history" element={<History identity={identity} role={role} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

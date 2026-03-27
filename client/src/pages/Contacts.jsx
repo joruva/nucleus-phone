@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useContacts from '../hooks/useContacts';
 
@@ -40,13 +40,26 @@ function callBadge(callHistory) {
 export default function Contacts({ identity, callState, twilioStatus }) {
   const { contacts, loading, error, fetchContacts } = useContacts();
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('All');
-  const [expanded, setExpanded] = useState(null);
+  const [filter, setFilter] = useState(() => sessionStorage.getItem('contacts_filter') || 'All');
   const navigate = useNavigate();
+  const listRef = useRef(null);
 
   useEffect(() => {
     fetchContacts('');
   }, [fetchContacts]);
+
+  // Restore scroll position on mount (back from cockpit)
+  useEffect(() => {
+    if (!loading && listRef.current) {
+      const saved = sessionStorage.getItem('contacts_scroll');
+      if (saved) listRef.current.scrollTop = parseInt(saved, 10);
+    }
+  }, [loading]);
+
+  // Persist filter changes
+  useEffect(() => {
+    sessionStorage.setItem('contacts_filter', filter);
+  }, [filter]);
 
   // Debounced search
   useEffect(() => {
@@ -57,6 +70,14 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     }, 400);
     return () => clearTimeout(timer);
   }, [search, fetchContacts]);
+
+  function handleCockpit(contact) {
+    // Save scroll position before navigating
+    if (listRef.current) {
+      sessionStorage.setItem('contacts_scroll', String(listRef.current.scrollTop));
+    }
+    navigate(`/cockpit/${contact.id}`);
+  }
 
   async function handleCall(contact) {
     if (twilioStatus !== 'ready') return;
@@ -107,7 +128,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
       </div>
 
       {/* Contact list */}
-      <div className="flex-1 overflow-y-auto scroll-container px-4 space-y-2 pb-4">
+      <div ref={listRef} className="flex-1 overflow-y-auto scroll-container px-4 space-y-2 pb-4">
         {loading && contacts.length === 0 && (
           <p className="text-center text-jv-muted py-8">Loading contacts...</p>
         )}
@@ -123,7 +144,6 @@ export default function Contacts({ identity, callState, twilioStatus }) {
           const name = `${props.firstname || ''} ${props.lastname || ''}`.trim() || 'Unknown';
           const phone = props.phone || props.mobilephone || '';
           const badge = callBadge(contact.callHistory);
-          const isExpanded = expanded === contact.id;
 
           return (
             <div
@@ -136,7 +156,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
             >
               <div
                 className="flex items-center justify-between p-4 cursor-pointer"
-                onClick={() => setExpanded(isExpanded ? null : contact.id)}
+                onClick={() => !contact._isTest && handleCockpit(contact)}
               >
                 <div className="flex items-center gap-3 flex-1 min-w-0">
                   <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dispositionDot(contact.callHistory)}`} />
@@ -163,27 +183,11 @@ export default function Contacts({ identity, callState, twilioStatus }) {
                       </svg>
                     </button>
                   )}
+                  {!contact._isTest && (
+                    <span className="text-jv-muted text-xs">&#8250;</span>
+                  )}
                 </div>
               </div>
-
-              {isExpanded && (
-                <div className="px-4 pb-4 border-t border-jv-border pt-3 space-y-1">
-                  {props.jobtitle && (
-                    <p className="text-sm"><span className="text-jv-muted">Title:</span> {props.jobtitle}</p>
-                  )}
-                  {props.email && (
-                    <p className="text-sm"><span className="text-jv-muted">Email:</span> {props.email}</p>
-                  )}
-                  {(props.city || props.state) && (
-                    <p className="text-sm"><span className="text-jv-muted">Location:</span> {[props.city, props.state].filter(Boolean).join(', ')}</p>
-                  )}
-                  {contact.callHistory && (
-                    <p className="text-sm">
-                      <span className="text-jv-muted">Calls:</span> {contact.callHistory.callCount} total
-                    </p>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}

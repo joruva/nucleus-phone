@@ -1,13 +1,15 @@
 const API_BASE = '/api';
 
 async function apiFetch(path, options = {}) {
+  const { signal, ...rest } = options;
   const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
+    ...rest,
     credentials: 'include',
+    signal,
     headers: {
       'Content-Type': 'application/json',
       'X-Requested-With': 'fetch',
-      ...options.headers,
+      ...rest.headers,
     },
   });
 
@@ -84,4 +86,12 @@ export function saveDisposition(callId, data) {
     method: 'POST',
     body: JSON.stringify(data),
   });
+}
+
+export function getCockpit(identifier, signal) {
+  return apiFetch(`/cockpit/${encodeURIComponent(identifier)}`, { signal });
+}
+
+export function refreshCockpit(identifier, signal) {
+  return apiFetch(`/cockpit/${encodeURIComponent(identifier)}?refresh=true`, { signal });
 }
