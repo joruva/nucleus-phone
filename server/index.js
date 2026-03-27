@@ -42,6 +42,9 @@ app.use('/api/call', require('./routes/call'));
 app.use('/api/call/recording-status', require('./routes/recording'));
 app.use('/api/contacts', require('./routes/contacts'));
 app.use('/api/history', require('./routes/history'));
+app.use('/api/cockpit', require('./routes/cockpit'));
+app.use('/api/fireflies-sync', require('./routes/fireflies-sync'));
+app.use('/api/scoreboard', require('./routes/scoreboard'));
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');

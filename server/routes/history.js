@@ -4,6 +4,7 @@ const { pool } = require('../db');
 const { sendSlackAlert, formatCallAlert } = require('../lib/slack');
 const { addNoteToContact } = require('../lib/hubspot');
 const { formatDuration } = require('../lib/format');
+const { syncInteraction } = require('../lib/interaction-sync');
 
 const router = Router();
 
@@ -155,6 +156,26 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
         })
         .catch((err) => console.error('HubSpot sync failed:', err.message));
     }
+
+    // Sync to customer_interactions (async, non-blocking)
+    syncInteraction({
+      channel: 'voice',
+      direction: 'outbound',
+      sessionId: `npc_${call.conference_name || call.id}`,
+      phone: call.lead_phone,
+      contactName: call.lead_name,
+      companyName: call.lead_company,
+      agentName: call.caller_identity,
+      recordingUrl: call.recording_url,
+      summary: notes || '',
+      productsDiscussed: products_discussed || [],
+      disposition: qualification === 'hot' ? 'qualified_hot'
+        : qualification === 'warm' ? 'qualified_warm'
+        : disposition,
+      qualification: qualification
+        ? { stage: qualification, score: qualification === 'hot' ? 90 : 60 }
+        : undefined,
+    }).catch(err => console.error('Interaction sync failed:', err.message));
 
     res.json(call);
   } catch (err) {
