@@ -383,10 +383,16 @@ describe('POST /api/call/end', () => {
 /* ───────────── POST /api/call/status ───────────── */
 
 describe('POST /api/call/status', () => {
+  // No x-api-key — this route uses twilioWebhook (signature validation,
+  // disabled outside production), not apiKeyAuth.
   const send = (body) =>
     request(app).post('/api/call/status').send(body);
 
-  afterEach(() => {
+  beforeAll(() => {
+    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
+  });
+
+  afterAll(() => {
     delete process.env.NUCLEUS_PHONE_NUMBER;
   });
 
@@ -419,8 +425,6 @@ describe('POST /api/call/status', () => {
     };
     conference.getConference.mockReturnValue(conf);
     conference.claimLeadDial.mockReturnValue(true);
-    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
-
     const mockCreate = jest.fn().mockResolvedValue({});
     client.conferences.mockReturnValue({
       participants: { create: mockCreate },
@@ -437,7 +441,8 @@ describe('POST /api/call/status', () => {
       'nucleus-call-abc', { conferenceSid: 'CF100' }
     );
 
-    // Persisted SID to DB
+    // Persisted SID to DB (fire-and-forget in production — mock resolves
+    // synchronously so the assertion works without flushing microtasks)
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining('UPDATE nucleus_phone_calls SET conference_sid'),
       ['CF100', 'nucleus-call-abc']
@@ -463,8 +468,6 @@ describe('POST /api/call/status', () => {
     };
     conference.getConference.mockReturnValue(conf);
     conference.claimLeadDial.mockReturnValue(true);
-    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
-
     const mockCreate = jest.fn().mockResolvedValue({});
     client.conferences.mockReturnValue({
       participants: { create: mockCreate },
@@ -478,7 +481,13 @@ describe('POST /api/call/status', () => {
       Muted: 'false',
     }).expect(204);
 
-    expect(mockCreate).toHaveBeenCalled();
+    expect(mockCreate).toHaveBeenCalledWith({
+      from: '+18005550000',
+      to: '+16025559999',
+      earlyMedia: true,
+      beep: false,
+      endConferenceOnExit: true,
+    });
   });
 
   /* ── Double-dial prevention ── */
@@ -552,7 +561,6 @@ describe('POST /api/call/status', () => {
     };
     conference.getConference.mockReturnValue(conf);
     conference.claimLeadDial.mockReturnValue(true);
-    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
 
     client.conferences.mockReturnValue({
       participants: { create: jest.fn().mockRejectedValue(new Error('Twilio down')) },
