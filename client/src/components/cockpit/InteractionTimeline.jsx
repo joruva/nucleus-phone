@@ -51,20 +51,20 @@ export default function InteractionTimeline({ interactionHistory, priorCalls }) 
   const hasMore = entries.length > MAX_VISIBLE;
 
   return (
-    <div className="mb-2">
+    <div>
       <div
         className="flex justify-between items-center cursor-pointer"
-        style={{ marginBottom: open ? 4 : 0 }}
+        style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[10px] font-semibold text-cp-text-muted uppercase tracking-wider">
+        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
           Timeline ({entries.length})
         </div>
-        <span className="text-[10px] text-cp-text-muted">{open ? '▾' : '▸'}</span>
+        <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>
       </div>
       {open && (
         <div
-          className="rounded-lg py-2 px-3 transition-colors duration-300 bg-cp-card border border-cp-border"
+          className="rounded-lg py-2.5 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
         >
           {visible.map((e, i) => {
             const badge = OUTCOME_BADGES[e.outcome] || OUTCOME_BADGES.info;
@@ -72,17 +72,17 @@ export default function InteractionTimeline({ interactionHistory, priorCalls }) 
             return (
               <div
                 key={`${e.date}-${e.agent}-${i}`}
-                className="flex items-center gap-2 py-1.5"
+                className="flex items-center gap-2.5 py-1.5"
                 style={{ borderBottom: i < visible.length - 1 ? '1px solid var(--cockpit-card-border)' : 'none' }}
               >
-                <span className="text-[11px] text-cp-text-muted min-w-[44px] shrink-0">
+                <span className="text-xs text-cp-text-muted min-w-[48px] shrink-0">
                   {formatDate(e.date)}
                 </span>
-                <span className="text-[12px] text-cp-text-secondary flex-1 truncate">
+                <span className="text-[13px] text-cp-text-secondary flex-1 truncate">
                   <strong className="font-medium text-cp-text">{e.agent}</strong> — {e.action}
                 </span>
                 <span
-                  className="inline-flex items-center px-2 py-[1px] rounded-xl text-[10px] font-medium shrink-0"
+                  className="inline-flex items-center px-2 py-[2px] rounded-xl text-[11px] font-medium shrink-0"
                   style={{ background: badge.bg, color: badge.color }}
                 >
                   {badge.label}
@@ -91,7 +91,7 @@ export default function InteractionTimeline({ interactionHistory, priorCalls }) 
             );
           })}
           {hasMore && (
-            <div className="text-[10px] text-cp-text-muted text-center pt-1">
+            <div className="text-[11px] text-cp-text-muted text-center pt-1">
               +{entries.length - MAX_VISIBLE} more
             </div>
           )}

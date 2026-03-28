@@ -54,12 +54,12 @@ export default function IntelNuggets({ nuggets, watchOuts }) {
   if (!items.length) return null;
 
   return (
-    <div className="mb-2 min-w-0">
-      <div className="text-[10px] font-semibold text-cp-text-muted uppercase tracking-wider mb-1">
+    <div className="mb-3 min-w-0">
+      <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider mb-1.5">
         Intelligence nuggets
       </div>
       <div
-        className="flex gap-1.5 overflow-x-auto pb-1"
+        className="flex gap-2 overflow-x-auto pb-1"
         style={{
           maskImage: 'linear-gradient(to right, black 85%, transparent)',
           WebkitMaskImage: 'linear-gradient(to right, black 85%, transparent)',
@@ -70,19 +70,19 @@ export default function IntelNuggets({ nuggets, watchOuts }) {
           return (
             <div
               key={i}
-              className="min-w-[160px] flex-[1_0_160px] rounded-md py-2 px-2.5 transition-colors duration-300"
+              className="min-w-[180px] flex-[1_0_180px] rounded-lg py-2.5 px-3 transition-colors duration-300"
               style={{
                 background: c.bg,
-                borderTop: `2px solid ${c.accent}`,
+                borderTop: `3px solid ${c.accent}`,
               }}
             >
               <div
-                className="text-[9px] font-semibold uppercase tracking-wider mb-0.5"
+                className="text-[10px] font-semibold uppercase tracking-wider mb-1"
                 style={{ color: c.accent }}
               >
                 {n.category}
               </div>
-              <div className="text-[12px] font-medium leading-[1.25]" style={{ color: c.text }}>
+              <div className="text-[13px] font-medium leading-[1.3]" style={{ color: c.text }}>
                 {n.headline}
               </div>
             </div>

@@ -12,13 +12,13 @@ export default function ProductReference({ productReference }) {
     <div>
       <div
         className="flex justify-between items-center cursor-pointer"
-        style={{ marginBottom: open ? 4 : 0 }}
+        style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[10px] font-semibold text-cp-text-muted uppercase tracking-wider">
+        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
           Recommended product
         </div>
-        <span className="text-[10px] text-cp-text-muted">{open ? '▾' : '▸'}</span>
+        <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>
       </div>
       {open && (
         <div
