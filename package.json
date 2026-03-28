@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server/index.js",
     "start": "node server/index.js",
-    "build": "cd client && npm install && npx vite build",
+    "build": "cd client && npm install --include=dev && npx vite build",
     "test": "jest",
     "test:watch": "jest --watch"
   },
