@@ -379,3 +379,278 @@ describe('POST /api/call/end', () => {
       .expect(500);
   });
 });
+
+/* ───────────── POST /api/call/status ───────────── */
+
+describe('POST /api/call/status', () => {
+  const send = (body) =>
+    request(app).post('/api/call/status').send(body);
+
+  afterEach(() => {
+    delete process.env.NUCLEUS_PHONE_NUMBER;
+  });
+
+  test('returns 204 for any event', async () => {
+    conference.getConference.mockReturnValue(null);
+    await send({ StatusCallbackEvent: 'conference-start', FriendlyName: 'x' })
+      .expect(204);
+  });
+
+  test('does nothing when conference not found', async () => {
+    conference.getConference.mockReturnValue(null);
+    await send({
+      StatusCallbackEvent: 'participant-join',
+      FriendlyName: 'nucleus-call-gone',
+      ConferenceSid: 'CF1',
+      CallSid: 'CA1',
+    }).expect(204);
+
+    expect(conference.updateConference).not.toHaveBeenCalled();
+    expect(conference.claimLeadDial).not.toHaveBeenCalled();
+  });
+
+  /* ── Lead-dial on conference-start ── */
+
+  test('saves ConferenceSid and dials lead on conference-start', async () => {
+    const conf = {
+      conferenceSid: null,
+      leadPhone: '+16025551234',
+      participants: [],
+    };
+    conference.getConference.mockReturnValue(conf);
+    conference.claimLeadDial.mockReturnValue(true);
+    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
+
+    const mockCreate = jest.fn().mockResolvedValue({});
+    client.conferences.mockReturnValue({
+      participants: { create: mockCreate },
+    });
+
+    await send({
+      StatusCallbackEvent: 'conference-start',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+
+    // Saved SID to in-memory state
+    expect(conference.updateConference).toHaveBeenCalledWith(
+      'nucleus-call-abc', { conferenceSid: 'CF100' }
+    );
+
+    // Persisted SID to DB
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE nucleus_phone_calls SET conference_sid'),
+      ['CF100', 'nucleus-call-abc']
+    );
+
+    // Dialed the lead
+    expect(mockCreate).toHaveBeenCalledWith({
+      from: '+18005550000',
+      to: '+16025551234',
+      earlyMedia: true,
+      beep: false,
+      endConferenceOnExit: true,
+    });
+  });
+
+  /* ── Lead-dial on participant-join ── */
+
+  test('dials lead on participant-join (races conference-start)', async () => {
+    const conf = {
+      conferenceSid: null,
+      leadPhone: '+16025559999',
+      participants: [],
+    };
+    conference.getConference.mockReturnValue(conf);
+    conference.claimLeadDial.mockReturnValue(true);
+    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
+
+    const mockCreate = jest.fn().mockResolvedValue({});
+    client.conferences.mockReturnValue({
+      participants: { create: mockCreate },
+    });
+
+    await send({
+      StatusCallbackEvent: 'participant-join',
+      FriendlyName: 'nucleus-call-def',
+      ConferenceSid: 'CF200',
+      CallSid: 'CA50',
+      Muted: 'false',
+    }).expect(204);
+
+    expect(mockCreate).toHaveBeenCalled();
+  });
+
+  /* ── Double-dial prevention ── */
+
+  test('skips lead dial when claimLeadDial returns false', async () => {
+    const conf = {
+      conferenceSid: 'CF100',
+      leadPhone: '+16025551234',
+      participants: [],
+    };
+    conference.getConference.mockReturnValue(conf);
+    conference.claimLeadDial.mockReturnValue(false);
+
+    const mockCreate = jest.fn();
+    client.conferences.mockReturnValue({
+      participants: { create: mockCreate },
+    });
+
+    await send({
+      StatusCallbackEvent: 'conference-start',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  test('skips SID update when conferenceSid already set', async () => {
+    const conf = {
+      conferenceSid: 'CF100',
+      leadPhone: '+16025551234',
+      participants: [],
+    };
+    conference.getConference.mockReturnValue(conf);
+    conference.claimLeadDial.mockReturnValue(false);
+
+    await send({
+      StatusCallbackEvent: 'conference-start',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+
+    expect(conference.updateConference).not.toHaveBeenCalled();
+    expect(pool.query).not.toHaveBeenCalled();
+  });
+
+  test('skips dial when leadPhone is null', async () => {
+    const conf = {
+      conferenceSid: null,
+      leadPhone: null,
+      participants: [],
+    };
+    conference.getConference.mockReturnValue(conf);
+
+    await send({
+      StatusCallbackEvent: 'conference-start',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+
+    expect(conference.claimLeadDial).not.toHaveBeenCalled();
+  });
+
+  /* ── Twilio dial failure is swallowed ── */
+
+  test('returns 204 even when Twilio dial fails', async () => {
+    const conf = {
+      conferenceSid: null,
+      leadPhone: '+16025551234',
+      participants: [],
+    };
+    conference.getConference.mockReturnValue(conf);
+    conference.claimLeadDial.mockReturnValue(true);
+    process.env.NUCLEUS_PHONE_NUMBER = '+18005550000';
+
+    client.conferences.mockReturnValue({
+      participants: { create: jest.fn().mockRejectedValue(new Error('Twilio down')) },
+    });
+
+    await send({
+      StatusCallbackEvent: 'conference-start',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+  });
+
+  /* ── Participant tracking ── */
+
+  test('tracks participant on join', async () => {
+    const participants = [];
+    conference.getConference.mockReturnValue({
+      conferenceSid: 'CF100',
+      leadPhone: null,
+      participants,
+    });
+
+    await send({
+      StatusCallbackEvent: 'participant-join',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+      CallSid: 'CA77',
+      Muted: 'true',
+    }).expect(204);
+
+    expect(participants).toHaveLength(1);
+    expect(participants[0]).toEqual(expect.objectContaining({
+      callSid: 'CA77',
+      muted: true,
+    }));
+  });
+
+  test('removes participant on leave', async () => {
+    const participants = [
+      { callSid: 'CA1', muted: false, joinedAt: new Date() },
+      { callSid: 'CA2', muted: false, joinedAt: new Date() },
+    ];
+    const conf = { participants };
+    conference.getConference.mockReturnValue(conf);
+
+    await send({
+      StatusCallbackEvent: 'participant-leave',
+      FriendlyName: 'nucleus-call-abc',
+      CallSid: 'CA1',
+    }).expect(204);
+
+    expect(conf.participants).toHaveLength(1);
+    expect(conf.participants[0].callSid).toBe('CA2');
+  });
+
+  /* ── Conference end ── */
+
+  test('updates DB and removes conference on end', async () => {
+    const NOW = 1_700_000_120_000;
+    jest.spyOn(Date, 'now').mockReturnValue(NOW);
+
+    const startedAt = new Date(NOW - 120_000); // exactly 2 min ago
+    conference.getConference.mockReturnValue({
+      startedAt,
+      participants: [],
+    });
+    pool.query.mockResolvedValueOnce({ rowCount: 1 });
+
+    await send({
+      StatusCallbackEvent: 'conference-end',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("SET status = 'completed'"),
+      [120, 'CF100', 'nucleus-call-abc']
+    );
+
+    expect(conference.removeConference).toHaveBeenCalledWith('nucleus-call-abc');
+
+    Date.now.mockRestore();
+  });
+
+  test('removes conference even when DB update fails', async () => {
+    const startedAt = new Date(Date.now() - 10_000);
+    conference.getConference.mockReturnValue({
+      startedAt,
+      participants: [],
+    });
+    pool.query.mockRejectedValueOnce(new Error('DB down'));
+
+    await send({
+      StatusCallbackEvent: 'conference-end',
+      FriendlyName: 'nucleus-call-abc',
+      ConferenceSid: 'CF100',
+    }).expect(204);
+
+    expect(conference.removeConference).toHaveBeenCalledWith('nucleus-call-abc');
+  });
+});
