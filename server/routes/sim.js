@@ -11,7 +11,7 @@ const { sessionAuth } = require('../middleware/auth');
 const { pool } = require('../db');
 const { createOutboundCall, stopCall } = require('../lib/vapi');
 const { scoreTranscript } = require('../lib/sim-scorer');
-const { sendSlackAlert, formatSimScorecard } = require('../lib/slack');
+const { sendSlackAlert, sendAdminReport, formatSimScorecard, formatAdminReport } = require('../lib/slack');
 const team = require('../config/team.json');
 
 const router = Router();
@@ -70,6 +70,9 @@ function getPromptVersion(difficulty) {
 // Startup checks
 if (!process.env.SLACK_SALES_WEBHOOK_URL) {
   console.warn('SIM: Slack webhook not configured — scorecards will not post.');
+}
+if (!process.env.SLACK_ADMIN_WEBHOOK_URL) {
+  console.warn('SIM: SLACK_ADMIN_WEBHOOK_URL not set — admin mentoring reports will not post.');
 }
 if (!process.env.VAPI_WEBHOOK_SECRET) {
   console.error('SIM: VAPI_WEBHOOK_SECRET not set — webhook endpoint will reject ALL requests. Scoring will not work.');
@@ -382,7 +385,7 @@ router.post('/webhook', async (req, res) => {
 
     await persistScores(row.id, result);
 
-    // Slack scorecard
+    // Slack: public scorecard to sales channel, admin report to managers channel
     const { rows: [scored] } = await pool.query(
       'SELECT * FROM sim_call_scores WHERE id = $1',
       [row.id]
@@ -393,6 +396,10 @@ router.post('/webhook', async (req, res) => {
       await pool.query("UPDATE sim_call_scores SET slack_notified = true WHERE id = $1", [row.id]);
     } else {
       console.warn(`sim: Slack scorecard failed to post for call ${vapiCallId}`);
+    }
+    if (scored.admin_report) {
+      sendAdminReport(formatAdminReport(scored))
+        .catch(err => console.warn(`sim: admin report failed for ${vapiCallId}:`, err.message));
     }
   })().catch(err => {
     console.error(`sim scoring pipeline error for ${vapiCallId}:`, err.message);

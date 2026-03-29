@@ -137,7 +137,7 @@ async function scoreTranscript(transcript, difficulty) {
     };
   } catch (err) {
     if (err.name === 'AbortError') {
-      return { error: true, message: 'Claude API timed out after 45s' };
+      return { error: true, message: `Claude API timed out after ${SCORE_TIMEOUT / 1000}s` };
     }
     if (err instanceof SyntaxError) {
       return { error: true, message: `Failed to parse Claude JSON: ${err.message}` };

@@ -9,9 +9,11 @@ const STATUS_BADGE = {
 
 export default function CockpitHeader({
   callPhase, timer, onThemeToggle, theme, onBack, onRefresh, refreshing,
-  leaderboard, currentUser,
+  leaderboard, currentUser, isPractice, practiceStats,
 }) {
-  const badge = STATUS_BADGE[callPhase] || STATUS_BADGE.pre;
+  const badge = isPractice
+    ? { bg: 'var(--cockpit-purple-bg)', color: 'var(--cockpit-purple-500)', label: 'Practice', pulse: false }
+    : (STATUS_BADGE[callPhase] || STATUS_BADGE.pre);
 
   const me = leaderboard?.find(e => e.identity === currentUser);
   const stats = me ? [
@@ -83,6 +85,28 @@ export default function CockpitHeader({
                   );
                 })}
               </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Center: practice stats (when in practice mode) */}
+      {isPractice && practiceStats && (
+        <div className="hidden md:flex items-center gap-1.5">
+          {practiceStats.practiceCount > 0 && (
+            <>
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ background: 'var(--cockpit-purple-bg)' }}>
+                <span className="text-[11px]">🎯</span>
+                <span className="text-[12px] font-semibold text-white/90 leading-none">{practiceStats.practiceCount}</span>
+                <span className="text-[9px] text-white/40">Practice</span>
+              </div>
+              {practiceStats.avgScore && (
+                <div className="flex items-center gap-1 px-2 py-0.5 rounded" style={{ background: 'var(--cockpit-purple-bg)' }}>
+                  <span className="text-[11px]">📊</span>
+                  <span className="text-[12px] font-semibold text-white/90 leading-none">{practiceStats.avgScore}</span>
+                  <span className="text-[9px] text-white/40">Avg</span>
+                </div>
+              )}
             </>
           )}
         </div>

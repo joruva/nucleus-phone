@@ -111,6 +111,7 @@ export default function App() {
         )}
         <Route path="/history" element={<History identity={identity} role={role} />} />
         <Route path="/scoreboard" element={<Scoreboard />} />
+        <Route path="/practice" element={<Navigate to="/cockpit/sim-mike-garza" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

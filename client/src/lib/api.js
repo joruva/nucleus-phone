@@ -99,3 +99,26 @@ export function refreshCockpit(identifier, signal) {
 export function getScoreboard(signal) {
   return apiFetch('/scoreboard', { signal });
 }
+
+export function startPracticeCall(difficulty) {
+  return apiFetch('/sim/call', {
+    method: 'POST',
+    body: JSON.stringify({ difficulty }),
+  });
+}
+
+export function getPracticeCallStatus(id, signal) {
+  return apiFetch(`/sim/call/${id}/status`, { signal });
+}
+
+export function cancelPracticeCall(id) {
+  return apiFetch(`/sim/call/${id}/cancel`, { method: 'POST' });
+}
+
+export function getPracticeScores(identity) {
+  return apiFetch(`/sim/scores/${encodeURIComponent(identity)}`);
+}
+
+export function getPracticeScoreboard(signal) {
+  return apiFetch('/sim/scoreboard', { signal });
+}

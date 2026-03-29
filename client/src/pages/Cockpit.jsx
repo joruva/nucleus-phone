@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useCockpit from '../hooks/useCockpit';
 import useCockpitTheme from '../hooks/useCockpitTheme';
 import useScoreboard from '../hooks/useScoreboard';
+import usePracticeScoreboard from '../hooks/usePracticeScoreboard';
+import { SIM_ID_PREFIX } from '../lib/constants';
 import CockpitHeader from '../components/cockpit/CockpitHeader';
 import ContactIdentity from '../components/cockpit/ContactIdentity';
 import RapportOpener from '../components/cockpit/RapportOpener';
@@ -12,6 +15,8 @@ import QualScript from '../components/cockpit/QualScript';
 import CompanyIntel from '../components/cockpit/CompanyIntel';
 import ProductReference from '../components/cockpit/ProductReference';
 import CallControls from '../components/cockpit/CallControls';
+import PracticeCallButton from '../components/cockpit/PracticeCallButton';
+import PracticeHistory from '../components/cockpit/PracticeHistory';
 
 function deriveCallPhase(twilioStatus, callData) {
   if (twilioStatus === 'connecting' || twilioStatus === 'ringing' || twilioStatus === 'connected')
@@ -37,11 +42,17 @@ function Skeleton() {
 export default function Cockpit({ identity, callState, twilioStatus }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  const isPractice = id?.startsWith(SIM_ID_PREFIX);
   const { data, loading, error, refreshing, refresh } = useCockpit(id);
   const { theme, toggle } = useCockpitTheme();
   const scoreboard = useScoreboard();
+  const practiceBoard = usePracticeScoreboard(isPractice);
+  const [historyKey, setHistoryKey] = useState(0);
 
   const callPhase = deriveCallPhase(twilioStatus, callState.callData);
+
+  // Find current user's practice stats from the leaderboard
+  const myPracticeStats = practiceBoard.data?.leaderboard?.find(e => e.identity === identity);
 
   function handleBack() {
     navigate('/');
@@ -73,6 +84,11 @@ export default function Cockpit({ identity, callState, twilioStatus }) {
     navigate('/complete');
   }
 
+  function handleScoreComplete() {
+    setHistoryKey(k => k + 1);
+    practiceBoard.refresh();
+  }
+
   const d = data || {};
 
   return (
@@ -90,6 +106,8 @@ export default function Cockpit({ identity, callState, twilioStatus }) {
         refreshing={refreshing}
         leaderboard={scoreboard.data?.leaderboard}
         currentUser={identity}
+        isPractice={isPractice}
+        practiceStats={myPracticeStats}
       />
 
       {loading ? (
@@ -103,7 +121,7 @@ export default function Cockpit({ identity, callState, twilioStatus }) {
         </div>
       ) : (
         <>
-          <div className="flex-1 min-h-0">
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 px-5 py-4">
               {/* Left column — Rapport */}
               <div className="min-w-0">
@@ -131,16 +149,34 @@ export default function Cockpit({ identity, callState, twilioStatus }) {
                 <ProductReference productReference={d.rapport?.product_reference} />
               </div>
             </div>
+
+            {/* Practice history (below the grid, inside scrollable area) */}
+            {isPractice && (
+              <PracticeHistory identity={identity} refreshKey={historyKey} />
+            )}
           </div>
 
-          <CallControls
-            callPhase={callPhase}
-            timer={callState.elapsed}
-            onCallNow={handleCallNow}
-            onEndCall={handleEndCall}
-            onSaveNext={handleSaveNext}
-            disabled={twilioStatus !== 'ready'}
-          />
+          {/* Bottom bar: practice button or real call controls */}
+          {isPractice ? (
+            <div
+              className="sticky bottom-0 z-10 flex items-center justify-center px-4 py-3 shrink-0 transition-colors duration-300"
+              style={{
+                background: 'var(--cockpit-footer-bg)',
+                borderTop: '1px solid var(--cockpit-card-border)',
+              }}
+            >
+              <PracticeCallButton identity={identity} onScoreComplete={handleScoreComplete} />
+            </div>
+          ) : (
+            <CallControls
+              callPhase={callPhase}
+              timer={callState.elapsed}
+              onCallNow={handleCallNow}
+              onEndCall={handleEndCall}
+              onSaveNext={handleSaveNext}
+              disabled={twilioStatus !== 'ready'}
+            />
+          )}
         </>
       )}
     </div>

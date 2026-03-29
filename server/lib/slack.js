@@ -55,6 +55,7 @@ function formatCallAlert(callData) {
   };
 }
 
+// Keep in sync with client/src/lib/constants.js GRADE_EMOJI
 const GRADE_EMOJI = { A: '🏆', B: '👍', C: '📝', D: '⚠️', F: '❌' };
 
 function scoreBar(score) {
@@ -69,7 +70,7 @@ function formatSimScorecard(data) {
   const grade = data.call_grade || data.grade;
   const emoji = GRADE_EMOJI[grade] || '🎯';
   const dur = formatDuration(data.duration_seconds);
-  const diff = data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1);
+  const diff = data.difficulty ? data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1) : 'Unknown';
 
   return {
     text: `${emoji} Practice Scorecard — ${data.caller_identity} | ${diff} | Grade: ${grade}`,
@@ -108,15 +109,58 @@ function formatSimScorecard(data) {
         type: 'section',
         text: { type: 'mrkdwn', text: `*Work on:* ${data.top_improvement}` },
       }] : []),
-      ...(data.admin_report ? [
-        { type: 'divider' },
-        {
-          type: 'section',
-          text: { type: 'mrkdwn', text: `:lock: *Mentoring Notes (managers only):*\n${data.admin_report}` },
-        },
-      ] : []),
     ],
   };
 }
 
-module.exports = { sendSlackAlert, formatCallAlert, formatSimScorecard };
+function formatAdminReport(data) {
+  const grade = data.call_grade || data.grade;
+  const diff = data.difficulty ? data.difficulty.charAt(0).toUpperCase() + data.difficulty.slice(1) : 'Unknown';
+  return {
+    text: `:lock: Mentoring Notes — ${data.caller_identity} | ${diff} | Grade: ${grade}`,
+    blocks: [
+      {
+        type: 'header',
+        text: { type: 'plain_text', text: `🔒 Mentoring Notes — ${data.caller_identity}` },
+      },
+      {
+        type: 'section',
+        fields: [
+          { type: 'mrkdwn', text: `*Rep:*\n${data.caller_identity}` },
+          { type: 'mrkdwn', text: `*Difficulty:*\n${diff}` },
+          { type: 'mrkdwn', text: `*Grade:*\n${grade} (${data.score_overall}/10)` },
+        ],
+      },
+      {
+        type: 'section',
+        text: { type: 'mrkdwn', text: data.admin_report },
+      },
+    ],
+  };
+}
+
+async function sendAdminReport(message) {
+  const webhookUrl = process.env.SLACK_ADMIN_WEBHOOK_URL;
+  if (!webhookUrl) {
+    console.warn('SLACK_ADMIN_WEBHOOK_URL not set — skipping admin report');
+    return false;
+  }
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(message),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      console.error('Slack admin report failed:', res.status, body);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Slack admin report error:', err.message);
+    return false;
+  }
+}
+
+module.exports = { sendSlackAlert, sendAdminReport, formatCallAlert, formatSimScorecard, formatAdminReport };
