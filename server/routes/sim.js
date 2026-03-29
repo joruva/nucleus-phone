@@ -86,8 +86,9 @@ async function persistScores(rowId, result) {
        score_close = $9, note_close = $10,
        score_overall = $11, call_grade = $12,
        top_strength = $13, top_improvement = $14,
+       caller_debrief = $15, admin_report = $16,
        status = 'scored', scored_at = NOW()
-     WHERE id = $15`,
+     WHERE id = $17`,
     [
       result.scores.rapport, result.notes.rapport,
       result.scores.discovery, result.notes.discovery,
@@ -96,6 +97,7 @@ async function persistScores(rowId, result) {
       result.scores.close, result.notes.close,
       result.overall, result.grade,
       result.topStrength, result.topImprovement,
+      result.callerDebrief, result.adminReport,
       rowId,
     ]
   );
@@ -163,14 +165,20 @@ router.post('/call', sessionAuth, async (req, res) => {
   }
 
   const promptVersion = getPromptVersion(difficulty);
-  const { rows: [row] } = await pool.query(
-    `INSERT INTO sim_call_scores (vapi_call_id, caller_identity, difficulty, prompt_version, status)
-     VALUES ($1, $2, $3, $4, 'in-progress')
-     RETURNING id`,
-    [call.id, identity, difficulty, promptVersion]
-  );
-
-  res.json({ simCallId: row.id, vapiCallId: call.id });
+  try {
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO sim_call_scores (vapi_call_id, caller_identity, difficulty, prompt_version, status)
+       VALUES ($1, $2, $3, $4, 'in-progress')
+       RETURNING id`,
+      [call.id, identity, difficulty, promptVersion]
+    );
+    res.json({ simCallId: row.id, vapiCallId: call.id });
+  } catch (err) {
+    // INSERT failed after Vapi call was already initiated — stop the orphaned call
+    console.error('sim: INSERT failed after Vapi call initiated, stopping orphan:', err.message);
+    stopCall(call.id).catch(e => console.warn('sim: failed to stop orphan:', e.message));
+    res.status(500).json({ error: 'Failed to record practice call' });
+  }
 });
 
 // ─── GET /call/:id/status — Poll call status ──────────────────────
@@ -181,7 +189,7 @@ router.get('/call/:id/status', sessionAuth, async (req, res) => {
   if (!validateId(req, res)) return;
   const { rows } = await pool.query(
     `SELECT status, score_overall, call_grade, duration_seconds,
-            top_strength, top_improvement
+            top_strength, top_improvement, caller_debrief
      FROM sim_call_scores WHERE id = $1`,
     [req.params.id]
   );
@@ -194,6 +202,7 @@ router.get('/call/:id/status', sessionAuth, async (req, res) => {
     duration_seconds: r.duration_seconds,
     top_strength: r.top_strength,
     top_improvement: r.top_improvement,
+    caller_debrief: r.caller_debrief,
   });
 });
 
@@ -206,7 +215,7 @@ router.get('/scores/:identity', sessionAuth, async (req, res) => {
             score_rapport, note_rapport, score_discovery, note_discovery,
             score_objection, note_objection, score_product, note_product,
             score_close, note_close, top_strength, top_improvement,
-            recording_url, prompt_version, status, created_at
+            recording_url, caller_debrief, prompt_version, status, created_at
      FROM sim_call_scores
      WHERE caller_identity = $1 AND status IN ('scored', 'score-failed')
      ORDER BY created_at DESC

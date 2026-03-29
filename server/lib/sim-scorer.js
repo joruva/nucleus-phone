@@ -5,7 +5,7 @@
 
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
-const SCORE_TIMEOUT = 45000;
+const SCORE_TIMEOUT = 60000;
 
 // Weights must sum to 1.0: 0.20 + 0.25 + 0.25 + 0.15 + 0.15 = 1.00
 const WEIGHTS = { rapport: 0.20, discovery: 0.25, objection: 0.25, product: 0.15, close: 0.15 };
@@ -20,6 +20,12 @@ Score the call transcript on these 5 categories (each 0.0-10.0):
 4. PRODUCT_KNOWLEDGE (15% weight): Correct product match? Accurate specs? Value positioning vs just features? (Joruva sells JRS-series rotary screw compressors. For Mike's 50-75 CFM at 125 PSI, the right match is the JRS-10E — 10HP, 40 CFM @ 150 PSI, $9,495. Key value props: energy savings vs piston, integrated dryer option for moisture issues, AS9100-grade air quality, 5-year airend warranty.)
 5. CLOSE (15% weight): Asked for specific next step? Got agreement? Concrete not vague?
 
+You must also produce two coaching outputs:
+
+CALLER_DEBRIEF (shown to the rep): 3-5 sentences. Start with something they did well — be specific and genuine. Then address 1-2 areas for growth constructively. End with a high-level suggestion they can try next time. Keep it motivating. Do NOT reveal specific prospect triggers, objection patterns, or the "right answers" that would let them game the simulation. Coach the skill, not the shortcut.
+
+ADMIN_REPORT (sent privately to sales managers): Be fully honest. Name specific weaknesses without sugarcoating. Note patterns (freezing on objections, talking past the close, feature-dumping, etc). Suggest concrete mentoring actions the managers can take with this rep — e.g., "Role-play price objections with them," "Have them listen to Tom's discovery calls," "They need to slow down and ask questions before pitching." This is for Tom and Paul to read and act on.
+
 Respond with ONLY valid JSON:
 {
   "rapport": { "score": 8.0, "note": "one sentence" },
@@ -28,7 +34,9 @@ Respond with ONLY valid JSON:
   "product": { "score": 7.0, "note": "one sentence" },
   "close": { "score": 5.5, "note": "one sentence" },
   "top_strength": "Best thing the rep did",
-  "top_improvement": "Top area to work on"
+  "top_improvement": "Top area to work on",
+  "caller_debrief": "3-5 sentence constructive debrief for the rep",
+  "admin_report": "Fully honest assessment with specific mentoring suggestions for managers"
 }`;
 
 function clamp(val, min, max) {
@@ -71,7 +79,7 @@ async function scoreTranscript(transcript, difficulty) {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 1024,
+        max_tokens: 2048,
         system: SYSTEM_PROMPT,
         messages: [{
           role: 'user',
@@ -124,6 +132,8 @@ async function scoreTranscript(transcript, difficulty) {
       grade: computeGrade(overall),
       topStrength: String(parsed.top_strength || ''),
       topImprovement: String(parsed.top_improvement || ''),
+      callerDebrief: String(parsed.caller_debrief || ''),
+      adminReport: String(parsed.admin_report || ''),
     };
   } catch (err) {
     if (err.name === 'AbortError') {

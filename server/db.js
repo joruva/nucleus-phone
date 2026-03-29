@@ -115,6 +115,8 @@ async function initSchema() {
         call_grade VARCHAR(2),
         top_strength TEXT,
         top_improvement TEXT,
+        caller_debrief TEXT,
+        admin_report TEXT,
         prompt_version VARCHAR(16),
         status VARCHAR(20) DEFAULT 'in-progress',
         slack_notified BOOLEAN DEFAULT FALSE,
@@ -124,6 +126,12 @@ async function initSchema() {
       CREATE INDEX IF NOT EXISTS idx_sim_caller ON sim_call_scores(caller_identity);
       CREATE INDEX IF NOT EXISTS idx_sim_created ON sim_call_scores(created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_sim_vapi ON sim_call_scores(vapi_call_id);
+    `);
+
+    // Add debrief columns (safe for existing deployments)
+    await client.query(`
+      ALTER TABLE sim_call_scores ADD COLUMN IF NOT EXISTS caller_debrief TEXT;
+      ALTER TABLE sim_call_scores ADD COLUMN IF NOT EXISTS admin_report TEXT;
     `);
 
     // Sweep stuck rows from prior restart (Render deploy, OOM, etc.)

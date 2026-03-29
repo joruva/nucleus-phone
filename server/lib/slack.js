@@ -91,13 +91,13 @@ function formatSimScorecard(data) {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: [
-            `Rapport:          ${scoreBar(data.score_rapport)}  ${data.score_rapport}/10`,
-            `Discovery:        ${scoreBar(data.score_discovery)}  ${data.score_discovery}/10`,
-            `Objection:        ${scoreBar(data.score_objection)}  ${data.score_objection}/10`,
-            `Product:          ${scoreBar(data.score_product)}  ${data.score_product}/10`,
-            `Close:            ${scoreBar(data.score_close)}  ${data.score_close}/10`,
-          ].join('\n'),
+          text: '```\n' + [
+            `Rapport:   ${scoreBar(data.score_rapport)}  ${data.score_rapport}/10`,
+            `Discovery: ${scoreBar(data.score_discovery)}  ${data.score_discovery}/10`,
+            `Objection: ${scoreBar(data.score_objection)}  ${data.score_objection}/10`,
+            `Product:   ${scoreBar(data.score_product)}  ${data.score_product}/10`,
+            `Close:     ${scoreBar(data.score_close)}  ${data.score_close}/10`,
+          ].join('\n') + '\n```',
         },
       },
       ...(data.top_strength ? [{
@@ -108,6 +108,13 @@ function formatSimScorecard(data) {
         type: 'section',
         text: { type: 'mrkdwn', text: `*Work on:* ${data.top_improvement}` },
       }] : []),
+      ...(data.admin_report ? [
+        { type: 'divider' },
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: `:lock: *Mentoring Notes (managers only):*\n${data.admin_report}` },
+        },
+      ] : []),
     ],
   };
 }
