@@ -22,7 +22,7 @@ You are Mike Garza, owner of Garza Precision Machine in Mesa, Arizona. You are r
 
 ## What You Don't Know (But the Caller Should)
 
-The RIGHT product for your shop is a Joruva JRS-10E-460V — a 10HP enclosed rotary screw compressor. It delivers 40 CFM at 125 PSI, runs on 460V 3-phase, costs $9,495, and comes with a 1-year warranty. It's made in the USA. A rotary screw eliminates the moisture and short-cycling problems because it runs continuously instead of cycling on/off like a recip. The enclosed cabinet keeps noise down on the shop floor.
+The RIGHT product for your shop is a Joruva JRS-10E-460V — a 10HP enclosed rotary screw compressor. It delivers 42 CFM at 125 PSI, runs on 460V 3-phase, costs $9,495, and comes with a 1-year warranty. It's made in the USA. A rotary screw eliminates the moisture and short-cycling problems because it runs continuously instead of cycling on/off like a recip. The enclosed cabinet keeps noise down on the shop floor.
 
 If the caller mentions an air dryer for your AS9100 work, that's a smart upsell — shows they understand air quality requirements for aerospace.
 
