@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import DailyIframe from '@daily-co/daily-js';
 import { startPracticeCall, getPracticeCallStatus, cancelPracticeCall } from '../../lib/api';
 import { GRADE_EMOJI } from '../../lib/constants';
 
@@ -17,14 +18,24 @@ const SCORE_TIMEOUT_MS = 60000;
 export default function PracticeCallButton({ identity, onScoreComplete }) {
   const [phase, setPhase] = useState('idle'); // idle | selecting | connecting | in-progress | scoring | complete | error
   const [difficulty, setDifficulty] = useState(null);
+  const [callMode, setCallMode] = useState('browser'); // 'phone' | 'browser'
   const [simCallId, setSimCallId] = useState(null);
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const pollRef = useRef(null);
   const abortRef = useRef(null);
   const startTimeRef = useRef(null);
+  const dailyRef = useRef(null);
   const onScoreCompleteRef = useRef(onScoreComplete);
   onScoreCompleteRef.current = onScoreComplete;
+
+  const cleanupDaily = useCallback(() => {
+    if (dailyRef.current) {
+      dailyRef.current.leave().catch(() => {});
+      dailyRef.current.destroy();
+      dailyRef.current = null;
+    }
+  }, []);
 
   const cleanup = useCallback(() => {
     if (pollRef.current) {
@@ -35,7 +46,8 @@ export default function PracticeCallButton({ identity, onScoreComplete }) {
       abortRef.current.abort();
       abortRef.current = null;
     }
-  }, []);
+    cleanupDaily();
+  }, [cleanupDaily]);
 
   useEffect(() => cleanup, [cleanup]);
 
@@ -100,12 +112,25 @@ export default function PracticeCallButton({ identity, onScoreComplete }) {
     setResult(null);
 
     try {
-      const { simCallId: id } = await startPracticeCall(diff);
-      setSimCallId(id);
+      const data = await startPracticeCall(diff, callMode);
+      setSimCallId(data.simCallId);
+
+      if (callMode === 'browser' && data.webCallUrl) {
+        const callObject = DailyIframe.createCallObject({ audioSource: true, videoSource: false });
+        dailyRef.current = callObject;
+
+        callObject.on('left-meeting', () => {
+          cleanupDaily();
+        });
+
+        await callObject.join({ url: data.webCallUrl, startAudioOff: false, startVideoOff: true });
+      }
+
       setPhase('in-progress');
       startTimeRef.current = Date.now();
-      startPolling(id, 'in-progress');
+      startPolling(data.simCallId, 'in-progress');
     } catch (err) {
+      cleanupDaily();
       setPhase('error');
       setErrorMsg(err.message);
     }
@@ -146,6 +171,29 @@ export default function PracticeCallButton({ identity, onScoreComplete }) {
   if (phase === 'selecting') {
     return (
       <div className="flex flex-col gap-2 w-full max-w-[400px] mx-auto">
+        {/* Mode toggle */}
+        <div className="flex items-center justify-center gap-1 p-0.5 rounded-lg mb-1"
+          style={{ background: 'var(--cockpit-card)', border: '1px solid var(--cockpit-card-border)' }}
+        >
+          {[
+            { key: 'browser', icon: '🔊', label: 'Browser' },
+            { key: 'phone', icon: '📱', label: 'Phone' },
+          ].map(m => (
+            <button
+              key={m.key}
+              onClick={() => setCallMode(m.key)}
+              className="flex-1 py-1.5 rounded-md text-[12px] font-medium cursor-pointer transition-colors"
+              style={{
+                background: callMode === m.key ? 'var(--cockpit-purple-bg)' : 'transparent',
+                color: callMode === m.key ? 'var(--cockpit-purple-900)' : 'var(--cockpit-text-muted)',
+                border: callMode === m.key ? '1px solid var(--cockpit-purple-border)' : '1px solid transparent',
+              }}
+            >
+              {m.icon} {m.label}
+            </button>
+          ))}
+        </div>
+
         <p className="text-[13px] font-medium text-center" style={{ color: 'var(--cockpit-text-secondary)' }}>
           Choose difficulty
         </p>
@@ -194,7 +242,9 @@ export default function PracticeCallButton({ identity, onScoreComplete }) {
             style={{ background: 'var(--cockpit-purple-500)' }}
           />
           <span className="text-sm font-medium" style={{ color: 'var(--cockpit-purple-900)' }}>
-            {phase === 'connecting' ? 'Calling your phone...' : 'Practice call in progress'}
+            {phase === 'connecting'
+              ? (callMode === 'browser' ? 'Connecting browser audio...' : 'Calling your phone...')
+              : (callMode === 'browser' ? '🔊 Practice call — browser audio' : 'Practice call in progress')}
           </span>
         </div>
         <button

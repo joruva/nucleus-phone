@@ -48,6 +48,16 @@ async function createOutboundCall({ assistantId, customerNumber, phoneNumberId }
 }
 
 /**
+ * Initiate a browser-based practice call via Vapi.
+ * Returns call object with webCallUrl for Daily.co WebRTC join.
+ */
+async function createWebCall({ assistantId }) {
+  return vapiRequest('POST', 'call/web', {
+    assistantId,
+  });
+}
+
+/**
  * Stop an in-progress Vapi call.
  */
 async function stopCall(vapiCallId) {
@@ -57,4 +67,4 @@ async function stopCall(vapiCallId) {
   return vapiRequest('POST', `call/${encodeURIComponent(vapiCallId)}/stop`);
 }
 
-module.exports = { createOutboundCall, stopCall };
+module.exports = { createOutboundCall, createWebCall, stopCall };

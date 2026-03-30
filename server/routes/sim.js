@@ -9,7 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { sessionAuth } = require('../middleware/auth');
 const { pool } = require('../db');
-const { createOutboundCall, stopCall } = require('../lib/vapi');
+const { createOutboundCall, createWebCall, stopCall } = require('../lib/vapi');
 const { scoreTranscript } = require('../lib/sim-scorer');
 const { sendSlackAlert, sendAdminReport, formatSimScorecard, formatAdminReport } = require('../lib/slack');
 const team = require('../config/team.json');
@@ -107,8 +107,9 @@ async function persistScores(rowId, result) {
 }
 
 // ─── POST /call — Initiate practice call ───────────────────────────
+// mode: 'phone' (default) calls the user's phone, 'browser' uses WebRTC.
 router.post('/call', sessionAuth, async (req, res) => {
-  const { difficulty } = req.body;
+  const { difficulty, mode = 'phone' } = req.body;
   const identity = req.user.identity;
 
   // Validate difficulty
@@ -116,13 +117,15 @@ router.post('/call', sessionAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid difficulty. Must be: easy, medium, hard' });
   }
 
-  // Look up phone
-  const phone = lookupPhone(identity);
-  if (!phone) {
-    return res.status(400).json({ error: `No phone configured for ${identity}` });
-  }
-  if (!E164_RE.test(phone)) {
-    return res.status(400).json({ error: `Invalid phone format for ${identity}: ${phone}` });
+  // Phone mode requires a configured number
+  if (mode === 'phone') {
+    const phone = lookupPhone(identity);
+    if (!phone) {
+      return res.status(400).json({ error: `No phone configured for ${identity}. Use browser mode instead.` });
+    }
+    if (!E164_RE.test(phone)) {
+      return res.status(400).json({ error: `Invalid phone format for ${identity}: ${phone}` });
+    }
   }
 
   // Guard: live call in progress
@@ -155,13 +158,14 @@ router.post('/call', sessionAuth, async (req, res) => {
   }
 
   // Call Vapi FIRST so we have the call ID before inserting.
-  // This eliminates the race where the webhook arrives before the row has vapi_call_id.
   let call;
   try {
-    call = await createOutboundCall({
-      assistantId,
-      customerNumber: phone,
-    });
+    if (mode === 'browser') {
+      call = await createWebCall({ assistantId });
+    } else {
+      const phone = lookupPhone(identity);
+      call = await createOutboundCall({ assistantId, customerNumber: phone });
+    }
   } catch (err) {
     console.error('Vapi call initiation failed:', err.message);
     return res.status(502).json({ error: 'Failed to initiate practice call' });
@@ -177,9 +181,12 @@ router.post('/call', sessionAuth, async (req, res) => {
        RETURNING id`,
       [call.id, identity, difficulty, promptVersion, listenUrl, controlUrl]
     );
-    res.json({ simCallId: row.id, vapiCallId: call.id });
+    const response = { simCallId: row.id, vapiCallId: call.id };
+    if (mode === 'browser' && call.webCallUrl) {
+      response.webCallUrl = call.webCallUrl;
+    }
+    res.json(response);
   } catch (err) {
-    // INSERT failed after Vapi call was already initiated — stop the orphaned call
     console.error('sim: INSERT failed after Vapi call initiated, stopping orphan:', err.message);
     stopCall(call.id).catch(e => console.warn('sim: failed to stop orphan:', e.message));
     res.status(500).json({ error: 'Failed to record practice call' });

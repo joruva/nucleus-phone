@@ -100,10 +100,10 @@ export function getScoreboard(signal) {
   return apiFetch('/scoreboard', { signal });
 }
 
-export function startPracticeCall(difficulty) {
+export function startPracticeCall(difficulty, mode = 'phone') {
   return apiFetch('/sim/call', {
     method: 'POST',
-    body: JSON.stringify({ difficulty }),
+    body: JSON.stringify({ difficulty, mode }),
   });
 }
 
