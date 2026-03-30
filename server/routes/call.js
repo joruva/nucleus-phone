@@ -149,6 +149,7 @@ router.post('/mute', apiKeyAuth, async (req, res) => {
 });
 
 // GET /api/call/active — list active conferences with participants
+// Admins also see in-progress practice calls.
 router.get('/active', apiKeyAuth, async (req, res) => {
   const conferences = listActiveConferences();
 
@@ -170,6 +171,7 @@ router.get('/active', apiKeyAuth, async (req, res) => {
       }
 
       return {
+        type: 'live',
         conferenceName: conf.conferenceName,
         conferenceSid: conf.conferenceSid,
         startedAt: conf.startedAt,
@@ -182,6 +184,33 @@ router.get('/active', apiKeyAuth, async (req, res) => {
       };
     })
   );
+
+  // Admins see in-progress practice calls too
+  if (req.user?.role === 'admin') {
+    try {
+      const { rows } = await pool.query(`
+        SELECT id, caller_identity, difficulty, created_at, status
+        FROM sim_call_scores
+        WHERE status IN ('in-progress', 'scoring')
+        ORDER BY created_at DESC
+      `);
+      for (const row of rows) {
+        enriched.push({
+          type: 'sim',
+          conferenceName: `sim-${row.id}`,
+          startedAt: row.created_at,
+          startedBy: row.caller_identity,
+          leadName: 'Mike Garza',
+          leadCompany: `Practice — ${row.difficulty}`,
+          participants: [],
+          duration: Math.floor((Date.now() - new Date(row.created_at).getTime()) / 1000),
+          simStatus: row.status,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch active sim calls:', err.message);
+    }
+  }
 
   res.json({ calls: enriched });
 });
