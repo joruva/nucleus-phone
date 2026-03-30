@@ -140,20 +140,24 @@ function formatAdminReport(data) {
 }
 
 async function sendAdminReport(message) {
-  const webhookUrl = process.env.SLACK_ADMIN_WEBHOOK_URL;
-  if (!webhookUrl) {
-    console.warn('SLACK_ADMIN_WEBHOOK_URL not set — skipping admin report');
+  const token = process.env.SLACK_BOT_TOKEN;
+  const channel = process.env.SLACK_ADMIN_CHANNEL_ID;
+  if (!token || !channel) {
+    console.warn('SLACK_BOT_TOKEN or SLACK_ADMIN_CHANNEL_ID not set — skipping admin report');
     return false;
   }
   try {
-    const res = await fetch(webhookUrl, {
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(message),
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({ channel, ...message }),
     });
-    if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      console.error('Slack admin report failed:', res.status, body);
+    const data = await res.json();
+    if (!data.ok) {
+      console.error('Slack admin report failed:', data.error);
       return false;
     }
     return true;

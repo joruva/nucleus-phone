@@ -71,8 +71,8 @@ function getPromptVersion(difficulty) {
 if (!process.env.SLACK_SALES_WEBHOOK_URL) {
   console.warn('SIM: Slack webhook not configured — scorecards will not post.');
 }
-if (!process.env.SLACK_ADMIN_WEBHOOK_URL) {
-  console.warn('SIM: SLACK_ADMIN_WEBHOOK_URL not set — admin mentoring reports will not post.');
+if (!process.env.SLACK_BOT_TOKEN || !process.env.SLACK_ADMIN_CHANNEL_ID) {
+  console.warn('SIM: SLACK_BOT_TOKEN or SLACK_ADMIN_CHANNEL_ID not set — admin mentoring reports will not post.');
 }
 if (!process.env.VAPI_WEBHOOK_SECRET) {
   console.error('SIM: VAPI_WEBHOOK_SECRET not set — webhook endpoint will reject ALL requests. Scoring will not work.');
