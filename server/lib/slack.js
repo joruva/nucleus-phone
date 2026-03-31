@@ -167,4 +167,39 @@ async function sendAdminReport(message) {
   }
 }
 
-module.exports = { sendSlackAlert, sendAdminReport, formatCallAlert, formatSimScorecard, formatAdminReport };
+/**
+ * Send a system alert to the admin channel (SLACK_ADMIN_CHANNEL_ID).
+ * Used for stale-call sweeps, Vapi failures, scoring errors — anything
+ * Tom needs to see as a sales manager, not just in server logs.
+ */
+async function sendSystemAlert(text, blocks) {
+  const token = process.env.SLACK_BOT_TOKEN;
+  const channel = process.env.SLACK_ADMIN_CHANNEL_ID;
+  if (!token || !channel) {
+    console.warn('SLACK_BOT_TOKEN or SLACK_ADMIN_CHANNEL_ID not set — skipping system alert');
+    return false;
+  }
+  try {
+    const payload = { channel, text };
+    if (blocks) payload.blocks = blocks;
+    const res = await fetch('https://slack.com/api/chat.postMessage', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      console.error('Slack system alert failed:', data.error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error('Slack system alert error:', err.message);
+    return false;
+  }
+}
+
+module.exports = { sendSlackAlert, sendAdminReport, sendSystemAlert, formatCallAlert, formatSimScorecard, formatAdminReport };

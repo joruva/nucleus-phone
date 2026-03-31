@@ -134,14 +134,7 @@ async function initSchema() {
       ALTER TABLE sim_call_scores ADD COLUMN IF NOT EXISTS monitor_control_url TEXT;
     `);
 
-    // Sweep stuck rows from prior restart (Render deploy, OOM, etc.)
-    const { rowCount } = await client.query(`
-      UPDATE sim_call_scores
-      SET status = 'score-failed'
-      WHERE status IN ('in-progress', 'scoring')
-        AND created_at < NOW() - INTERVAL '10 minutes'
-    `);
-    if (rowCount > 0) console.log(`sim: swept ${rowCount} stuck row(s) to score-failed`);
+    // Stale sweep is handled by lib/stale-sweep.js (runs on interval + startup)
     console.log('sim_call_scores table ready');
   } finally {
     client.release();

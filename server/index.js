@@ -7,6 +7,7 @@ const path = require('path');
 const { initSchema } = require('./db');
 const { errorHandler } = require('./middleware/error');
 const { apiKeyAuth } = require('./middleware/auth');
+const { startSweep } = require('./lib/stale-sweep');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -58,6 +59,7 @@ app.use(errorHandler);
 
 async function start() {
   await initSchema();
+  startSweep();
   app.listen(PORT, () => {
     console.log(`nucleus-phone listening on :${PORT}`);
   });

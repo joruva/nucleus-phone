@@ -11,7 +11,7 @@ const { sessionAuth } = require('../middleware/auth');
 const { pool } = require('../db');
 const { createOutboundCall, createWebCall, stopCall } = require('../lib/vapi');
 const { scoreTranscript } = require('../lib/sim-scorer');
-const { sendSlackAlert, sendAdminReport, formatSimScorecard, formatAdminReport } = require('../lib/slack');
+const { sendSlackAlert, sendAdminReport, sendSystemAlert, formatSimScorecard, formatAdminReport } = require('../lib/slack');
 const team = require('../config/team.json');
 
 const router = Router();
@@ -168,6 +168,13 @@ router.post('/call', sessionAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('Vapi call initiation failed:', err.message);
+    sendSystemAlert(
+      `🔴 Practice Call Failed — Vapi error for ${identity}`,
+      [{
+        type: 'section',
+        text: { type: 'mrkdwn', text: `*Vapi call initiation failed*\n*Caller:* ${identity}\n*Difficulty:* ${difficulty}\n*Mode:* ${mode}\n*Error:* ${err.message}` },
+      }]
+    ).catch(() => {});
     return res.status(502).json({ error: 'Failed to initiate practice call' });
   }
 
@@ -419,6 +426,13 @@ router.post('/webhook', async (req, res) => {
     if (result.error) {
       console.error(`sim scoring failed for ${vapiCallId}:`, result.message);
       await pool.query("UPDATE sim_call_scores SET status = 'score-failed' WHERE id = $1", [row.id]);
+      sendSystemAlert(
+        `🔴 Sim Scoring Failed — ${row.caller_identity}`,
+        [{
+          type: 'section',
+          text: { type: 'mrkdwn', text: `*Practice call scoring failed*\n*Caller:* ${row.caller_identity}\n*Difficulty:* ${row.difficulty}\n*Call ID:* ${vapiCallId}\n*Error:* ${result.message}\n\nAdmin can rescore via \`POST /api/sim/call/${row.id}/rescore\`` },
+        }]
+      ).catch(() => {});
       return;
     }
 
