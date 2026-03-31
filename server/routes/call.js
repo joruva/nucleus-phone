@@ -8,6 +8,7 @@ const {
   createConference, getConference, updateConference,
   removeConference, listActiveConferences, claimLeadDial,
 } = require('../lib/conference');
+const { cleanupCall } = require('../lib/live-analysis');
 const { sendSlackAlert } = require('../lib/slack');
 
 const router = Router();
@@ -302,6 +303,7 @@ router.post('/status', twilioWebhook, async (req, res) => {
     }
 
     removeConference(FriendlyName);
+    cleanupCall(FriendlyName);
   }
 
   res.sendStatus(204);

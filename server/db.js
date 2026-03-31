@@ -236,6 +236,9 @@ async function initSchema() {
       ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS ai_summarized BOOLEAN DEFAULT FALSE;
       ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS caller_call_sid VARCHAR(50);
     `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_calls_caller_call_sid ON nucleus_phone_calls(caller_call_sid);
+    `);
     console.log('nucleus_phone_calls columns updated');
 
   } finally {

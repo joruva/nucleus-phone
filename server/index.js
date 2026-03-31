@@ -8,6 +8,7 @@ const { initSchema } = require('./db');
 const { errorHandler } = require('./middleware/error');
 const { apiKeyAuth } = require('./middleware/auth');
 const { startSweep } = require('./lib/stale-sweep');
+const { attachWebSocket } = require('./lib/live-analysis');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -47,6 +48,7 @@ app.use('/api/cockpit', require('./routes/cockpit'));
 app.use('/api/fireflies-sync', require('./routes/fireflies-sync'));
 app.use('/api/scoreboard', require('./routes/scoreboard'));
 app.use('/api/sim', require('./routes/sim'));
+app.use('/api/transcription', require('./routes/transcription'));
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -60,9 +62,10 @@ app.use(errorHandler);
 async function start() {
   await initSchema();
   startSweep();
-  app.listen(PORT, () => {
+  const httpServer = app.listen(PORT, () => {
     console.log(`nucleus-phone listening on :${PORT}`);
   });
+  attachWebSocket(httpServer);
 }
 
 if (require.main === module) {
