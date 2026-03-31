@@ -160,31 +160,36 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
         <>
           <div className="flex-1 min-h-0 overflow-y-auto">
             {isPractice ? (
-              /* ── Practice layout: organized by scoring category ── */
-              <div className="px-5 py-4 max-w-3xl mx-auto">
-                <ContactIdentity identity={d.identity} />
+              /* ── Practice layout: full-width two-column ── */
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 px-5 py-4">
+                  {/* Left column — Prep material by scoring category */}
+                  <div className="min-w-0">
+                    <ContactIdentity identity={d.identity} />
+                    <ScoreSection label="Rapport" weight="20%" color="amber">
+                      <RapportOpener openingLine={d.rapport?.opening_line} />
+                      <RapportTags tags={d.rapport?.rapport_starters} />
+                    </ScoreSection>
+                    <ScoreSection label="Discovery" weight="25%" color="blue">
+                      <QualScript adaptedScript={d.rapport?.adapted_script} />
+                      <IntelNuggets nuggets={d.rapport?.intel_nuggets} />
+                    </ScoreSection>
+                    <ScoreSection label="Objection Handling" weight="25%" color="orange">
+                      <IntelNuggets watchOuts={d.rapport?.watch_outs} />
+                    </ScoreSection>
+                  </div>
 
-                <ScoreSection label="Rapport" weight="20%" color="amber">
-                  <RapportOpener openingLine={d.rapport?.opening_line} />
-                  <RapportTags tags={d.rapport?.rapport_starters} />
-                </ScoreSection>
-
-                <ScoreSection label="Discovery" weight="25%" color="blue">
-                  <QualScript adaptedScript={d.rapport?.adapted_script} />
-                  <IntelNuggets nuggets={d.rapport?.intel_nuggets} label="Prospect intel" />
-                </ScoreSection>
-
-                <ScoreSection label="Objection Handling" weight="25%" color="orange">
-                  <IntelNuggets watchOuts={d.rapport?.watch_outs} label="Watch outs" />
-                </ScoreSection>
-
-                <ScoreSection label="Product & Close" weight="30%" color="green">
-                  <ProductReference productReference={d.rapport?.product_reference} />
-                  <LiveAnalysis data={liveAnalysis} active={!!activeSimCallId} />
-                </ScoreSection>
+                  {/* Right column — Live intel (primary) + product reference */}
+                  <div className="min-w-0">
+                    <LiveAnalysis data={liveAnalysis} active={!!activeSimCallId} />
+                    <ScoreSection label="Product & Close" weight="30%" color="green">
+                      <ProductReference productReference={d.rapport?.product_reference} />
+                    </ScoreSection>
+                  </div>
+                </div>
 
                 <PracticeHistory identity={identity} refreshKey={historyKey} />
-              </div>
+              </>
             ) : (
               /* ── Real call layout: two-column with full context ── */
               <>
