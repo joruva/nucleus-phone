@@ -55,14 +55,24 @@ export default function IntelNuggets({ nuggets, watchOuts }) {
 
   return (
     <div className="mb-3 min-w-0">
-      <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider mb-1.5">
-        Intelligence nuggets
+      <div className="flex items-center justify-between mb-1.5">
+        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
+          Intelligence nuggets
+        </div>
+        {items.length > 10 && (
+          <div className="text-[10px] text-cp-text-muted">
+            Swipe →
+          </div>
+        )}
       </div>
       <div
-        className="flex gap-2 overflow-x-auto pb-1"
+        className="grid gap-2 overflow-x-auto pb-2 snap-x snap-mandatory"
         style={{
-          maskImage: 'linear-gradient(to right, black 85%, transparent)',
-          WebkitMaskImage: 'linear-gradient(to right, black 85%, transparent)',
+          gridTemplateRows: 'repeat(2, auto)',
+          gridAutoFlow: 'column',
+          gridAutoColumns: 'minmax(160px, 180px)',
+          scrollbarWidth: 'thin',
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         {items.map((n, i) => {
@@ -70,7 +80,7 @@ export default function IntelNuggets({ nuggets, watchOuts }) {
           return (
             <div
               key={i}
-              className="w-[180px] max-w-[45vw] flex-none rounded-lg py-2.5 px-3 transition-colors duration-300"
+              className="snap-start rounded-lg py-2.5 px-3 transition-colors duration-300"
               style={{
                 background: c.bg,
                 borderTop: `3px solid ${c.accent}`,
