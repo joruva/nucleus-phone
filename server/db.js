@@ -7,6 +7,9 @@ const pool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
+// Set after initSchema() — default false so the JS fallback is always safe.
+let FUZZY_AVAILABLE = false;
+
 pool.on('error', (err) => {
   console.error('Unexpected pool error:', err);
 });
@@ -136,9 +139,108 @@ async function initSchema() {
 
     // Stale sweep is handled by lib/stale-sweep.js (runs on interval + startup)
     console.log('sim_call_scores table ready');
+
+    // Equipment Knowledge Base tables
+    try {
+      await client.query('CREATE EXTENSION IF NOT EXISTS fuzzystrmatch');
+      FUZZY_AVAILABLE = true;
+    } catch (err) {
+      console.warn('fuzzystrmatch extension unavailable — fuzzy matching will use JS fallback:', err.message);
+    }
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS equipment_catalog (
+        id SERIAL PRIMARY KEY,
+        manufacturer VARCHAR(100) NOT NULL,
+        model VARCHAR(100) NOT NULL,
+        model_variants TEXT[],
+        category VARCHAR(50) NOT NULL,
+        subcategory VARCHAR(50),
+        cfm_min NUMERIC(8,2),
+        cfm_max NUMERIC(8,2),
+        cfm_typical NUMERIC(8,2),
+        psi_required INTEGER,
+        duty_cycle_pct INTEGER,
+        air_quality_class VARCHAR(20),
+        axis_count INTEGER,
+        power_hp NUMERIC(8,2),
+        voltage VARCHAR(20),
+        source VARCHAR(20) NOT NULL
+          CHECK (source IN ('manufacturer','field_verified','web_search','expert_input','call_intelligence')),
+        source_url TEXT,
+        confidence VARCHAR(10) DEFAULT 'medium'
+          CHECK (confidence IN ('high','medium','low','unverified')),
+        verified_by VARCHAR(50),
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW(),
+        last_verified_at TIMESTAMPTZ,
+        UNIQUE(manufacturer, model)
+      );
+      -- idx on (manufacturer, model) is implicit from UNIQUE constraint
+      CREATE INDEX IF NOT EXISTS idx_equip_category ON equipment_catalog(category);
+      CREATE INDEX IF NOT EXISTS idx_equip_variants ON equipment_catalog USING GIN(model_variants);
+
+      CREATE TABLE IF NOT EXISTS equipment_details (
+        id SERIAL PRIMARY KEY,
+        equipment_id INTEGER NOT NULL REFERENCES equipment_catalog(id) ON DELETE CASCADE,
+        description TEXT,
+        typical_applications TEXT[],
+        industries TEXT[],
+        air_usage_notes TEXT,
+        common_air_problems TEXT[],
+        recommended_air_quality TEXT,
+        recommended_compressor VARCHAR(50),
+        recommended_dryer VARCHAR(50),
+        recommended_filters TEXT[],
+        system_notes TEXT,
+        key_selling_points TEXT[],
+        common_objections TEXT[],
+        seo_keywords TEXT[],
+        search_volume_monthly INTEGER,
+        content_generated BOOLEAN DEFAULT FALSE,
+        manufacturer_url TEXT,
+        spec_sheet_url TEXT,
+        image_url TEXT,
+        UNIQUE(equipment_id)
+      );
+      -- idx on (equipment_id) is implicit from UNIQUE constraint
+      CREATE INDEX IF NOT EXISTS idx_equip_details_industries ON equipment_details USING GIN(industries);
+
+      CREATE TABLE IF NOT EXISTS equipment_sightings (
+        id SERIAL PRIMARY KEY,
+        manufacturer VARCHAR(100),
+        model VARCHAR(100),
+        raw_mention TEXT NOT NULL,
+        count INTEGER DEFAULT 1,
+        usage_pattern VARCHAR(20),
+        call_type VARCHAR(10) NOT NULL CHECK (call_type IN ('real','practice')),
+        call_id TEXT,
+        caller_identity VARCHAR(50),
+        contact_name VARCHAR(100),
+        company_name VARCHAR(100),
+        catalog_match_id INTEGER REFERENCES equipment_catalog(id),
+        resolved BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_sighting_mfg_model ON equipment_sightings(manufacturer, model);
+      CREATE INDEX IF NOT EXISTS idx_sighting_unresolved ON equipment_sightings(resolved) WHERE resolved = FALSE;
+    `);
+    console.log('equipment tables ready');
+
+    // Columns added after initial nucleus_phone_calls schema
+    await client.query(`
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS transcript TEXT;
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS ai_summary TEXT;
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS ai_action_items JSONB;
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS ai_disposition_suggestion VARCHAR(30);
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS ai_summarized BOOLEAN DEFAULT FALSE;
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS caller_call_sid VARCHAR(50);
+    `);
+    console.log('nucleus_phone_calls columns updated');
+
   } finally {
     client.release();
   }
 }
 
-module.exports = { pool, initSchema };
+module.exports = { pool, initSchema, get FUZZY_AVAILABLE() { return FUZZY_AVAILABLE; } };
