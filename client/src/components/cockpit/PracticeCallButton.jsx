@@ -40,7 +40,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onCallSt
     }
   }, []);
 
-  const cleanup = useCallback(() => {
+  const cleanupPoll = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
       pollRef.current = null;
@@ -49,13 +49,17 @@ export default function PracticeCallButton({ identity, onScoreComplete, onCallSt
       abortRef.current.abort();
       abortRef.current = null;
     }
+  }, []);
+
+  const cleanup = useCallback(() => {
+    cleanupPoll();
     cleanupVapi();
-  }, [cleanupVapi]);
+  }, [cleanupPoll, cleanupVapi]);
 
   useEffect(() => cleanup, [cleanup]);
 
   function startPolling(id, expectedPhase) {
-    cleanup();
+    cleanupPoll();
     const interval = expectedPhase === 'in-progress' ? POLL_CALL_MS : POLL_SCORE_MS;
     abortRef.current = new AbortController();
 
@@ -64,7 +68,8 @@ export default function PracticeCallButton({ identity, onScoreComplete, onCallSt
         const data = await getPracticeCallStatus(id, abortRef.current?.signal);
 
         if (expectedPhase === 'in-progress' && data.status !== 'in-progress') {
-          cleanup();
+          cleanupPoll();
+          cleanupVapi();
           onCallEndRef.current?.();
           if (data.status === 'scoring') {
             setPhase('scoring');
@@ -84,7 +89,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onCallSt
         }
 
         if (expectedPhase === 'scoring' && data.status !== 'scoring') {
-          cleanup();
+          cleanupPoll();
           if (data.status === 'scored') {
             setPhase('complete');
             setResult(data);
@@ -98,7 +103,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onCallSt
 
         // Scoring timeout — 60s is generous, something is stuck
         if (expectedPhase === 'scoring' && Date.now() - startTimeRef.current > SCORE_TIMEOUT_MS) {
-          cleanup();
+          cleanupPoll();
           setPhase('error');
           setErrorMsg('Scoring is taking longer than expected — check back soon');
         }
