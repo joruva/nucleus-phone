@@ -30,7 +30,7 @@ function categorize(text) {
   return 'APPROACH';
 }
 
-export default function IntelNuggets({ nuggets, watchOuts }) {
+export default function IntelNuggets({ nuggets, watchOuts, label }) {
   const items = [];
 
   if (nuggets?.length) {
@@ -57,7 +57,7 @@ export default function IntelNuggets({ nuggets, watchOuts }) {
     <div className="mb-3 min-w-0">
       <div className="flex items-center justify-between mb-1.5">
         <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
-          Intelligence nuggets
+          {label || 'Intelligence nuggets'}
         </div>
         {items.length > 10 && (
           <div className="text-[10px] text-cp-text-muted">

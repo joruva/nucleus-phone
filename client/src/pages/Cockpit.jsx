@@ -41,6 +41,33 @@ function Skeleton() {
   );
 }
 
+const SCORE_COLORS = {
+  amber:  { bg: 'var(--cockpit-amber-50)', text: 'var(--cockpit-amber-600)', border: 'var(--cockpit-amber-100)' },
+  blue:   { bg: 'var(--cockpit-blue-50)', text: 'var(--cockpit-blue-500)', border: 'var(--cockpit-blue-border)' },
+  green:  { bg: 'var(--cockpit-green-50)', text: 'var(--cockpit-green-500)', border: 'rgba(22,163,74,0.2)' },
+  orange: { bg: 'var(--cockpit-orange-50)', text: 'var(--cockpit-orange-500)', border: 'rgba(234,88,12,0.2)' },
+  purple: { bg: 'var(--cockpit-purple-50)', text: 'var(--cockpit-purple-500)', border: 'var(--cockpit-purple-border)' },
+};
+
+function ScoreSection({ label, weight, color, children }) {
+  const c = SCORE_COLORS[color] || SCORE_COLORS.blue;
+  return (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="inline-flex items-center px-2 py-[2px] rounded text-[10px] font-bold uppercase tracking-wider"
+          style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
+        >
+          {label}
+        </span>
+        <span className="text-[10px] font-semibold" style={{ color: c.text }}>{weight}</span>
+        <div className="flex-1 h-px" style={{ background: c.border }} />
+      </div>
+      {children}
+    </div>
+  );
+}
+
 export default function Cockpit({ identity, callState, twilioStatus, forcedId }) {
   const params = useParams();
   const id = forcedId || params.id;
@@ -132,38 +159,61 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
       ) : (
         <>
           <div className="flex-1 min-h-0 overflow-y-auto">
-            <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 px-5 py-4">
-              {/* Left column — Rapport */}
-              <div className="min-w-0">
+            {isPractice ? (
+              /* ── Practice layout: organized by scoring category ── */
+              <div className="px-5 py-4 max-w-3xl mx-auto">
                 <ContactIdentity identity={d.identity} />
-                <RapportOpener openingLine={d.rapport?.opening_line} />
-                <RapportTags tags={d.rapport?.rapport_starters} />
-                <IntelNuggets
-                  nuggets={d.rapport?.intel_nuggets}
-                  watchOuts={d.rapport?.watch_outs}
-                />
-                <ProductReference productReference={d.rapport?.product_reference} />
-                <LiveAnalysis data={liveAnalysis} active={callPhase === 'active' || !!activeSimCallId} />
-              </div>
 
-              {/* Right column — Timeline + Business */}
-              <div className="min-w-0">
-                <InteractionTimeline
-                  interactionHistory={d.interactionHistory}
-                  priorCalls={d.priorCalls}
-                />
-                <QualScript adaptedScript={d.rapport?.adapted_script} />
-                <CompanyIntel
-                  companyData={d.companyData}
-                  icpScore={d.icpScore}
-                  pipelineData={d.pipelineData}
-                />
-              </div>
-            </div>
+                <ScoreSection label="Rapport" weight="20%" color="amber">
+                  <RapportOpener openingLine={d.rapport?.opening_line} />
+                  <RapportTags tags={d.rapport?.rapport_starters} />
+                </ScoreSection>
 
-            {/* Practice history (below the grid, inside scrollable area) */}
-            {isPractice && (
-              <PracticeHistory identity={identity} refreshKey={historyKey} />
+                <ScoreSection label="Discovery" weight="25%" color="blue">
+                  <QualScript adaptedScript={d.rapport?.adapted_script} />
+                  <IntelNuggets nuggets={d.rapport?.intel_nuggets} label="Prospect intel" />
+                </ScoreSection>
+
+                <ScoreSection label="Objection Handling" weight="25%" color="orange">
+                  <IntelNuggets watchOuts={d.rapport?.watch_outs} label="Watch outs" />
+                </ScoreSection>
+
+                <ScoreSection label="Product & Close" weight="30%" color="green">
+                  <ProductReference productReference={d.rapport?.product_reference} />
+                  <LiveAnalysis data={liveAnalysis} active={!!activeSimCallId} />
+                </ScoreSection>
+
+                <PracticeHistory identity={identity} refreshKey={historyKey} />
+              </div>
+            ) : (
+              /* ── Real call layout: two-column with full context ── */
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-4 px-5 py-4">
+                  <div className="min-w-0">
+                    <ContactIdentity identity={d.identity} />
+                    <RapportOpener openingLine={d.rapport?.opening_line} />
+                    <RapportTags tags={d.rapport?.rapport_starters} />
+                    <IntelNuggets
+                      nuggets={d.rapport?.intel_nuggets}
+                      watchOuts={d.rapport?.watch_outs}
+                    />
+                    <ProductReference productReference={d.rapport?.product_reference} />
+                    <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} />
+                  </div>
+                  <div className="min-w-0">
+                    <InteractionTimeline
+                      interactionHistory={d.interactionHistory}
+                      priorCalls={d.priorCalls}
+                    />
+                    <QualScript adaptedScript={d.rapport?.adapted_script} />
+                    <CompanyIntel
+                      companyData={d.companyData}
+                      icpScore={d.icpScore}
+                      pipelineData={d.pipelineData}
+                    />
+                  </div>
+                </div>
+              </>
             )}
           </div>
 
