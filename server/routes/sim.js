@@ -405,40 +405,52 @@ router.post('/call/:id/rescore', sessionAuth, async (req, res) => {
  * simulator), so we extract from role==='assistant' transcripts only.
  */
 async function handleTranscriptEvent(message) {
-  const { transcript, call } = message;
-  if (!transcript || !call?.id) return;
+  // Vapi sends transcript events in two possible formats:
+  //   A) transcript is an object: { text, role, transcriptType }  (legacy/phone)
+  //   B) transcript is a string, role + transcriptType are top-level  (web SDK)
+  const raw = message.transcript;
+  const role = (typeof raw === 'object' ? raw?.role : null) || message.role;
+  const transcriptType = (typeof raw === 'object' ? raw?.transcriptType : null) || message.transcriptType;
+  const text = typeof raw === 'string' ? raw : raw?.text;
+  const callId = message.call?.id;
+
+  if (!callId) {
+    console.warn('sim transcript: no call.id in message, keys:', Object.keys(message).join(','));
+    return;
+  }
+  if (!text) return;
 
   // Only process final transcripts from the assistant (the simulated prospect)
-  if (transcript.transcriptType !== 'final') return;
-  if (transcript.role !== 'assistant') return;
-
-  const text = transcript.text;
-  if (!text) return;
+  if (transcriptType !== 'final') return;
+  if (role !== 'assistant') return;
 
   // Find the sim_call_scores row for this Vapi call
   let rows;
   try {
     ({ rows } = await pool.query(
       'SELECT id FROM sim_call_scores WHERE vapi_call_id = $1',
-      [call.id]
+      [callId]
     ));
   } catch (err) {
-    console.error(`sim transcript: DB lookup failed for vapi call ${call.id}:`, err.message);
+    console.error(`sim transcript: DB lookup failed for vapi call ${callId}:`, err.message);
     return;
   }
-  if (!rows.length) return;
+  if (!rows.length) {
+    console.debug(`sim transcript: no row for vapi_call_id=${callId} (link-vapi may be pending)`);
+    return;
+  }
 
   const simId = rows[0].id;
-  const callId = `sim-${simId}`;
+  const wsCallId = `sim-${simId}`;
 
   // Broadcast raw transcript chunk
-  broadcast(callId, {
+  broadcast(wsCallId, {
     type: 'transcript_chunk',
-    data: { text, speaker: transcript.role },
+    data: { text, speaker: role },
   });
 
   // Run entity extraction → lookup → sizing → broadcast pipeline
-  await processEquipmentChunk(callId, 'practice', String(simId), text);
+  await processEquipmentChunk(wsCallId, 'practice', String(simId), text);
 }
 
 // ─── POST /webhook — Vapi server events (transcript + end-of-call-report) ───
