@@ -6,11 +6,6 @@ const TIER_COLORS = {
   awareness: '#6b7280',
 };
 
-const STAGE_ORDER = [
-  'identified', 'priming', 'outreach', 'engaged',
-  'active', 'opportunity', 'won',
-];
-
 function TierBadge({ tier }) {
   const bg = TIER_COLORS[tier] || '#6b7280';
   return (
