@@ -66,10 +66,10 @@ async function patchAssistant(id, difficulty) {
     voice: {
       provider: '11labs',
       voiceId: 'kpftzLQxRv90Nn6qoJRf',
-      stability: 0.55,
-      similarityBoost: 0.65,
-      style: 0.35,
-      useSpeakerBoost: true,
+      stability: 0.7,
+      similarityBoost: 0.75,
+      style: 0.15,
+      useSpeakerBoost: false,
     },
   };
 
