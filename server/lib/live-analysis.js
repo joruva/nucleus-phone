@@ -42,12 +42,14 @@ function attachWebSocket(httpServer) {
 
     try {
       jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
+    } catch (err) {
+      console.warn('live-analysis: JWT verify failed:', err.message);
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
     }
 
+    console.log('live-analysis: WebSocket upgrade accepted');
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit('connection', ws, req);
     });
@@ -70,6 +72,7 @@ function attachWebSocket(httpServer) {
         ws._callId = msg.callId;
         if (!subscriptions.has(msg.callId)) subscriptions.set(msg.callId, new Set());
         subscriptions.get(msg.callId).add(ws);
+        console.log(`live-analysis: client subscribed to ${msg.callId} (${subscriptions.get(msg.callId).size} listeners)`);
       }
 
       if (msg.type === 'unsubscribe') {
@@ -101,7 +104,12 @@ function unsubClient(callId, ws) {
  */
 function broadcast(callId, message) {
   const clients = subscriptions.get(callId);
-  if (!clients || clients.size === 0) return;
+  if (!clients || clients.size === 0) {
+    if (message.type === 'equipment_detected') {
+      console.warn(`live-analysis: equipment detected for ${callId} but no subscribers`);
+    }
+    return;
+  }
 
   // Dedup equipment detections (skip dedup for null manufacturer to avoid
   // collisions — e.g. "we run Haas" and "we also have Mazak" both with

@@ -56,7 +56,7 @@ export default function LiveAnalysis({ data, active }) {
         />
         <span className="text-[12px] font-medium" style={{ color: 'var(--cockpit-blue-900)' }}>
           {!detected
-            ? 'Listening for equipment...'
+            ? (connected ? 'Listening for equipment...' : 'Connecting...')
             : `${equipment.length} ${equipment.length === 1 ? 'machine' : 'machines'} detected`}
         </span>
       </div>
