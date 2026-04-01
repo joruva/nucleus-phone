@@ -236,25 +236,25 @@ describe('COMPRESSOR_CATALOG', () => {
 
 describe('selectFilter', () => {
   it('picks smallest filter that covers demand', () => {
-    expect(selectFilter('particulate', 20).model).toBe('PF-30-8');
-    expect(selectFilter('particulate', 40).model).toBe('PF-55-8');
-    expect(selectFilter('particulate', 80).model).toBe('PF-100-8');
+    expect(selectFilter('particulate', 20).model).toBe('JPF-70');
+    expect(selectFilter('particulate', 40).model).toBe('JPF-70');
+    expect(selectFilter('particulate', 80).model).toBe('JPF-130');
   });
 
   it('picks largest filter when demand exceeds all sizes', () => {
-    expect(selectFilter('particulate', 200).model).toBe('PF-100-8');
+    expect(selectFilter('particulate', 200).model).toBe('JPF-130');
   });
 
   it('works for coalescing filters too', () => {
-    expect(selectFilter('coalescing', 25).model).toBe('CF-30-8');
-    expect(selectFilter('coalescing', 60).model).toBe('CF-100-8');
+    expect(selectFilter('coalescing', 25).model).toBe('JCF-70');
+    expect(selectFilter('coalescing', 60).model).toBe('JCF-70');
   });
 });
 
 describe('FILTER_SIZES', () => {
   it('has multiple sizes for each filter type', () => {
-    expect(FILTER_SIZES.particulate.length).toBeGreaterThanOrEqual(3);
-    expect(FILTER_SIZES.coalescing.length).toBeGreaterThanOrEqual(3);
+    expect(FILTER_SIZES.particulate.length).toBeGreaterThanOrEqual(2);
+    expect(FILTER_SIZES.coalescing.length).toBeGreaterThanOrEqual(2);
   });
 
   it('is sorted by CFM ascending', () => {

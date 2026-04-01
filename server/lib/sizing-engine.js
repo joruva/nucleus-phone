@@ -18,23 +18,33 @@ const COMPRESSOR_CATALOG = [
   { model: 'JRS-25E',   hp: 25,   cfm: 100, psi: 150, price: null,  voltage: '460V/3ph' },
 ];
 
+// CAS refrigerated air dryers — all 115V, stocked. ~45% gross margin.
 const DRYER_CATALOG = [
-  { model: 'RD40-115',  cfm: 40,  voltage: '115V/1/60', price: null },
-  { model: 'RD75-115',  cfm: 75,  voltage: '115V/1/60', price: null },
-  { model: 'RD100-230', cfm: 100, voltage: '230V/1/60', price: null },
+  { model: 'JRD-30',   cfm: 30,  voltage: '115V/1/60', cost: 1197,  price: 2195, cas_sku: 'RD30' },
+  { model: 'JRD-40',   cfm: 40,  voltage: '115V/1/60', cost: 1340,  price: 2495, cas_sku: 'RD40' },
+  { model: 'JRD-60',   cfm: 60,  voltage: '115V/1/60', cost: 1569,  price: 2895, cas_sku: 'RD60' },
+  { model: 'JRD-80',   cfm: 80,  voltage: '115V/1/60', cost: 1718,  price: 3195, cas_sku: 'RD80' },
+  { model: 'JRD-100',  cfm: 100, voltage: '115V/1/60', cost: 1976,  price: 3595, cas_sku: 'RD100' },
 ];
 
-// Filters sized by CFM capacity. selectFilter() picks the smallest that covers demand.
+// CAS wall-mount desiccant dryers — stocked, -60°F dewpoint.
+// Molecular sieve media (not activated alumina) — premium product class.
+// 6061 billet aluminum housing, spin-on canister, 1/3 size of conventional units.
+const DESICCANT_CATALOG = [
+  { model: 'JDD-40',  cfm: 40, voltage: '115V', dewpoint: -60, cost: 4705, price: 7495, cas_sku: 'SODD10HPN4NY' },
+  { model: 'JDD-80',  cfm: 80, voltage: '115V', dewpoint: -60, cost: 6525, price: 11895, cas_sku: 'SODD20HPN4NY' },
+];
+
+// CAS inline filters — stocked. ~49% gross margin.
+// "-70" = up to 70 CFM (compressors up to 10HP), "-130" = up to 130 CFM (15HP+).
 const FILTER_SIZES = {
   particulate: [
-    { model: 'PF-30-8', cfm: 30, micron: 1, price: null },
-    { model: 'PF-55-8', cfm: 55, micron: 1, price: null },
-    { model: 'PF-100-8', cfm: 100, micron: 1, price: null },
+    { model: 'JPF-70',  cfm: 70,  micron: 1,    cost: 229.00, price: 399, cas_sku: 'PF-70' },
+    { model: 'JPF-130', cfm: 130, micron: 1,    cost: 229.00, price: 499, cas_sku: 'PF-130' },
   ],
   coalescing: [
-    { model: 'CF-30-8', cfm: 30, micron: 0.01, price: null },
-    { model: 'CF-55-8', cfm: 55, micron: 0.01, price: null },
-    { model: 'CF-100-8', cfm: 100, micron: 0.01, price: null },
+    { model: 'JCF-70',  cfm: 70,  micron: 0.01, cost: 176.50, price: 349, cas_sku: 'CF-70' },
+    { model: 'JCF-130', cfm: 130, micron: 0.01, cost: 229.00, price: 449, cas_sku: 'CF-130' },
   ],
 };
 
@@ -150,6 +160,14 @@ function addQualityFilters(recommendation, airQualityClass) {
       recommendation.filters.push({ ...selectFilter('coalescing', cfm) });
       recommendation.notes.push('Coalescing filter added for air quality requirements');
     }
+
+    // Suggest desiccant dryer upgrade for aerospace/ISO environments
+    const desiccant = DESICCANT_CATALOG.find(d => d.cfm >= (recommendation.compressor?.cfm || 40))
+      || DESICCANT_CATALOG[DESICCANT_CATALOG.length - 1];
+    recommendation.desiccantUpgrade = { ...desiccant };
+    recommendation.notes.push(
+      `Consider desiccant dryer upgrade (${desiccant.model}, $${desiccant.price?.toLocaleString()}) — molecular sieve media achieves ${desiccant.dewpoint}°F dewpoint vs 38°F refrigerated. Required for AS9100/pharma.`
+    );
   }
 }
 
@@ -161,6 +179,7 @@ module.exports = {
   SAFETY_FACTOR,
   COMPRESSOR_CATALOG,
   DRYER_CATALOG,
+  DESICCANT_CATALOG,
   FILTER_CATALOG,
   FILTER_SIZES,
 };

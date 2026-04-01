@@ -156,7 +156,7 @@ const DETAILS = {
     common_air_problems: ['moisture in tool holder causing rust', 'pressure drops during simultaneous tool change and vise clamp'],
     recommended_air_quality: 'Dried air mandatory — moisture causes tool holder corrosion and bearing damage',
     recommended_compressor: 'JRS-10E',
-    recommended_dryer: 'RD40-115',
+    recommended_dryer: 'JRD-40',
     system_notes: 'Single VF-2: JRS-7.5E adequate. Multiple machines: JRS-10E or JRS-15E.',
     key_selling_points: ['Haas shops often add machines — size the system for growth', 'Moisture is the #1 maintenance issue for Haas tool holders'],
     common_objections: ['Already have a piston compressor', 'Getting quotes from Kaeser/Atlas Copco'],
@@ -168,7 +168,7 @@ const DETAILS = {
     air_usage_notes: 'Larger work envelope means more blow-off air. Often paired with 4th axis rotary = additional pneumatic clamping.',
     common_air_problems: ['undersized compressor from shop expansion', 'oil in air damaging paint finishes'],
     recommended_compressor: 'JRS-15E',
-    recommended_dryer: 'RD75-115',
+    recommended_dryer: 'JRD-80',
     system_notes: 'Shops with VF-4+ usually have 3-5 machines total. Size for the shop, not the machine.',
   },
   'Mazak:INTEGREX i-200': {
@@ -178,7 +178,7 @@ const DETAILS = {
     air_usage_notes: 'Higher continuous demand than standard lathe due to milling operations. Chip conveyor often pneumatic.',
     common_air_problems: ['insufficient CFM for simultaneous milling and turning air needs'],
     recommended_compressor: 'JRS-15E',
-    recommended_dryer: 'RD75-115',
+    recommended_dryer: 'JRD-80',
     system_notes: 'INTEGREX shops are high-end — sell on air quality, not just volume.',
   },
   'Pearson:CE25': {
@@ -188,7 +188,7 @@ const DETAILS = {
     air_usage_notes: 'Continuous air use during production. Multiple machines on a line compound demand quickly.',
     common_air_problems: ['pressure drops causing missed case folds', 'moisture causing tape gun failures'],
     recommended_compressor: 'JRS-10E',
-    recommended_dryer: 'RD40-115',
+    recommended_dryer: 'JRD-40',
     system_notes: 'Packaging lines often have 3-5 pneumatic machines. Size for the whole line.',
   },
   'SATA:SATAjet 5000 B 1.3': {
@@ -199,7 +199,7 @@ const DETAILS = {
     common_air_problems: ['moisture/oil in air causing fish-eyes in paint', 'undersized compressor cannot sustain spray pattern', 'pressure drop through long hose runs'],
     recommended_air_quality: 'Paint-grade air mandatory — ISO 8573 Class 1 for moisture and oil',
     recommended_compressor: 'JRS-10E',
-    recommended_dryer: 'RD40-115',
+    recommended_dryer: 'JRD-40',
     system_notes: 'Most body shops run 2-3 guns simultaneously. Size for peak booth usage. Always include coalescing filter.',
     key_selling_points: ['Fish-eyes = rework = $$. Clean dry air pays for itself', 'Painters know when air quality is bad — they will advocate internally'],
     common_objections: ['Expensive filter replacements', 'Already have a desiccant dryer'],
@@ -221,7 +221,7 @@ const DETAILS = {
     air_usage_notes: 'Vacuum hold-down is separate from compressed air. Air needed for ATC tool change and pneumatic clamps only.',
     common_air_problems: ['using shop air for both CNC and finish nailers — pressure fights'],
     recommended_compressor: 'JRS-7.5E',
-    recommended_dryer: 'RD40-115',
+    recommended_dryer: 'JRD-40',
     system_notes: 'Many wood shops can get by with JRS-7.5E unless running extensive pneumatic tooling.',
   },
 };

@@ -67,7 +67,7 @@ async function patchAssistant(id, difficulty) {
       provider: '11labs',
       voiceId: 'wsHauqjSkdBeAvdbUFmR',
     },
-    backgroundDenoisingEnabled: false,
+    backgroundDenoisingEnabled: true,
     backgroundSound: 'off',
   };
 
