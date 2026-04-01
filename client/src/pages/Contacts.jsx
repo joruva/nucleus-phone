@@ -4,19 +4,6 @@ import useContacts from '../hooks/useContacts';
 
 const FILTERS = ['All', 'Never Called', 'Callback Pending', 'Hot'];
 
-const TEST_CONTACT = {
-  id: 'test-call',
-  properties: {
-    firstname: 'Mike',
-    lastname: 'Garza',
-    phone: '+16026419729',
-    company: 'Garza Precision Machine',
-    jobtitle: 'Owner / Shop Manager',
-  },
-  callHistory: { callCount: 2, lastCall: new Date(Date.now() - 8 * 86400000).toISOString(), lastDisposition: 'callback_requested' },
-  _isTest: true,
-};
-
 function dispositionDot(callHistory) {
   if (!callHistory) return 'bg-gray-500';
   switch (callHistory.lastDisposition) {
@@ -139,7 +126,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
           <p className="text-center text-jv-muted py-8">No contacts found</p>
         )}
 
-        {[...(filter === 'All' || filter === 'Callback Pending' ? [TEST_CONTACT] : []), ...filtered].map((contact) => {
+        {filtered.map((contact) => {
           const props = contact.properties || {};
           const name = `${props.firstname || ''} ${props.lastname || ''}`.trim() || 'Unknown';
           const phone = props.phone || props.mobilephone || '';
@@ -148,11 +135,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
           return (
             <div
               key={contact.id}
-              className={`rounded-xl overflow-hidden ${
-                contact._isTest
-                  ? 'bg-jv-blue/10 border-2 border-jv-blue/40'
-                  : 'bg-jv-card border border-jv-border'
-              }`}
+              className="rounded-xl overflow-hidden bg-jv-card border border-jv-border"
             >
               <div
                 className="flex items-center justify-between p-4 cursor-pointer"
