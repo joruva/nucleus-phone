@@ -27,6 +27,33 @@ const DIFFICULTY_TO_ASSISTANT = {
   hard: 'VAPI_SIM_HARD_ID',
 };
 
+// Greeting pools — randomized per call so reps don't memorize the opener.
+const GREETING_POOLS = {
+  easy: [
+    "Garza Precision, this is Mike. What can I do for you?",
+    "Hey, Mike Garza.",
+    "This is Mike at Garza Precision, how can I help you?",
+    "Garza Precision, Mike speaking.",
+  ],
+  medium: [
+    "Yeah, this is Mike.",
+    "Mike speaking.",
+    "Garza Precision.",
+    "This is Mike.",
+  ],
+  hard: [
+    "Garza Precision.",
+    "Yeah.",
+    "Mike.",
+    "Hello???",
+  ],
+};
+
+function pickGreeting(difficulty) {
+  const pool = GREETING_POOLS[difficulty];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 // Load phone numbers from gitignored secrets file, fall back to env vars (PHONE_TOM, etc.)
 let phoneSecrets = {};
 try {
@@ -175,7 +202,7 @@ router.post('/call', sessionAuth, async (req, res) => {
          RETURNING id`,
         [identity, difficulty, promptVersion]
       );
-      res.json({ simCallId: row.id, assistantId, publicKey });
+      res.json({ simCallId: row.id, assistantId, publicKey, firstMessage: pickGreeting(difficulty) });
     } catch (err) {
       console.error('sim: INSERT failed:', err.message);
       res.status(500).json({ error: 'Failed to record practice call' });
@@ -187,7 +214,12 @@ router.post('/call', sessionAuth, async (req, res) => {
   let call;
   try {
     const phone = lookupPhone(identity);
-    call = await createOutboundCall({ assistantId, customerNumber: phone });
+    const greeting = pickGreeting(difficulty);
+    call = await createOutboundCall({
+      assistantId,
+      customerNumber: phone,
+      assistantOverrides: { firstMessage: greeting },
+    });
   } catch (err) {
     console.error('Vapi call initiation failed:', err.message);
     sendSystemAlert(

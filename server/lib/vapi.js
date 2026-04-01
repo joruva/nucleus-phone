@@ -40,12 +40,14 @@ async function vapiRequest(method, endpoint, body, { usePublicKey } = {}) {
  * Initiate an outbound practice call via Vapi.
  * Vapi calls the customer's phone and connects them to the assistant.
  */
-async function createOutboundCall({ assistantId, customerNumber, phoneNumberId }) {
-  return vapiRequest('POST', 'call/phone', {
+async function createOutboundCall({ assistantId, customerNumber, phoneNumberId, assistantOverrides }) {
+  const body = {
     assistantId,
     customer: { number: customerNumber },
     phoneNumberId: phoneNumberId || process.env.VAPI_PRACTICE_PHONE_ID,
-  });
+  };
+  if (assistantOverrides) body.assistantOverrides = assistantOverrides;
+  return vapiRequest('POST', 'call/phone', body);
 }
 
 /**

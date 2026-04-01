@@ -131,7 +131,8 @@ export default function PracticeCallButton({ identity, onScoreComplete, onCallSt
         vapi.on('call-end', () => {
           cleanupVapi();
         });
-        const vapiCall = await vapi.start(data.assistantId);
+        const overrides = data.firstMessage ? { firstMessage: data.firstMessage } : {};
+        const vapiCall = await vapi.start(data.assistantId, overrides);
         // Link the Vapi call ID BEFORE proceeding — webhooks arrive immediately
         await linkVapiCall(data.simCallId, vapiCall.id);
       }

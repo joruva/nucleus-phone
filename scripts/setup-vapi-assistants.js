@@ -125,11 +125,33 @@ function loadPrompt(difficulty) {
   return fs.readFileSync(filePath, 'utf-8');
 }
 
-const FIRST_MESSAGES = {
-  easy: "Garza Precision, this is Mike. What can I do for you?",
-  medium: "Yeah, this is Mike.",
-  hard: "Garza Precision.",
+// Greeting pools — randomized per call so reps don't memorize the opener.
+// The system prompt tells Mike NOT to generate a greeting (firstMessage handles it).
+const GREETING_POOLS = {
+  easy: [
+    "Garza Precision, this is Mike. What can I do for you?",
+    "Hey, Mike Garza.",
+    "This is Mike at Garza Precision, how can I help you?",
+    "Garza Precision, Mike speaking.",
+  ],
+  medium: [
+    "Yeah, this is Mike.",
+    "Mike speaking.",
+    "Garza Precision.",
+    "This is Mike.",
+  ],
+  hard: [
+    "Garza Precision.",
+    "Yeah.",
+    "Mike.",
+    "Hello???",
+  ],
 };
+
+function pickGreeting(difficulty) {
+  const pool = GREETING_POOLS[difficulty];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 async function createAssistant(difficulty, voiceId, webhookSecret) {
   console.log(`   Creating ${difficulty} assistant...`);
@@ -145,12 +167,12 @@ async function createAssistant(difficulty, voiceId, webhookSecret) {
     voice: {
       provider: '11labs',
       voiceId: voiceId,
-      stability: 0.45,
+      stability: 0.55,
       similarityBoost: 0.65,
       style: 0.35,
       useSpeakerBoost: true,
     },
-    firstMessage: FIRST_MESSAGES[difficulty],
+    firstMessage: pickGreeting(difficulty),
     endCallFunctionEnabled: true,
     maxDurationSeconds: 480,
     silenceTimeoutSeconds: 10,
