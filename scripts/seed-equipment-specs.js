@@ -88,6 +88,11 @@ const CNC_MILLS = [
   { manufacturer: 'Haas', model: 'TL-1', variants: ['TL1', 'TL 1'], subcategory: 'turning_center', cfm_min: 4, cfm_max: 10, cfm_typical: 6, psi: 90, duty: 45, hp: 7.5, axes: 2, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
   { manufacturer: 'Haas', model: 'TL-2', variants: ['TL2', 'TL 2'], subcategory: 'turning_center', cfm_min: 5, cfm_max: 12, cfm_typical: 8, psi: 90, duty: 50, hp: 10, axes: 2, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
 
+  // Swiss-type lathes — precision, high-volume, guide bushing machines
+  { manufacturer: 'Star', model: 'SR-20', variants: ['SR20', 'SR 20', 'Star SR20', 'Star SR-20J'], subcategory: 'swiss_type', cfm_min: 5, cfm_max: 12, cfm_typical: 8, psi: 90, duty: 70, hp: 5, axes: 7, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
+  { manufacturer: 'Citizen', model: 'L20', variants: ['L20', 'L-20', 'Cincom L20', 'Citizen Cincom L20', 'L20-VIII'], subcategory: 'swiss_type', cfm_min: 5, cfm_max: 12, cfm_typical: 8, psi: 90, duty: 70, hp: 5, axes: 7, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
+  { manufacturer: 'Tsugami', model: 'M08', variants: ['M08', 'M-08', 'M08J', 'Tsugami M08', 'M08SY'], subcategory: 'swiss_type', cfm_min: 4, cfm_max: 10, cfm_typical: 6, psi: 90, duty: 65, hp: 3, axes: 5, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
+
   // Brother Speedio — very popular in production
   { manufacturer: 'Brother', model: 'Speedio S500X2', variants: ['S500X2', 'Speedio S500', 'Brother S500'], subcategory: 'vertical_mill', cfm_min: 8, cfm_max: 15, cfm_typical: 10, psi: 90, duty: 70, hp: 7, axes: 3, voltage: '200V/3ph', quality: 'general' },
   { manufacturer: 'Brother', model: 'Speedio S700X2', variants: ['S700X2', 'Speedio S700', 'Brother S700'], subcategory: 'vertical_mill', cfm_min: 10, cfm_max: 18, cfm_typical: 12, psi: 90, duty: 70, hp: 11, axes: 3, voltage: '200V/3ph', quality: 'general' },
@@ -163,6 +168,10 @@ const WOODWORKING = [
   { manufacturer: 'Thermwood', model: 'Model 67', variants: ['Thermwood 67', 'Model67'], category: 'woodworking', subcategory: 'cnc_router', cfm_min: 12, cfm_max: 25, cfm_typical: 16, psi: 90, duty: 70, hp: 15, axes: 5, voltage: '480V/3ph', quality: 'general' },
   { manufacturer: 'Biesse', model: 'Rover A', variants: ['Rover', 'Biesse Rover', 'Rover A Edge'], category: 'woodworking', subcategory: 'cnc_router', cfm_min: 10, cfm_max: 18, cfm_typical: 12, psi: 90, duty: 65, hp: 12, axes: 5, voltage: '480V/3ph', quality: 'general' },
   { manufacturer: 'Grizzly', model: 'G0893', variants: ['G0893', 'Grizzly CNC'], category: 'woodworking', subcategory: 'cnc_router', cfm_min: 2, cfm_max: 5, cfm_typical: 3, psi: 90, duty: 40, hp: 1.5, axes: 3, voltage: '115V/1ph', quality: 'general' },
+
+  // Edge banders — pneumatic press, trimming, glue application
+  { manufacturer: 'Holz-Her', model: 'Lumina 1596', variants: ['Lumina 1596', 'Lumina1596', 'HolzHer Lumina'], category: 'woodworking', subcategory: 'edge_bander', cfm_min: 8, cfm_max: 16, cfm_typical: 12, psi: 90, duty: 75, hp: null, axes: null, voltage: '208V/3ph', quality: 'general' },
+  { manufacturer: 'Biesse', model: 'Akron 1100', variants: ['Akron1100', 'Akron 1100', 'Biesse Akron'], category: 'woodworking', subcategory: 'edge_bander', cfm_min: 10, cfm_max: 18, cfm_typical: 14, psi: 90, duty: 80, hp: null, axes: null, voltage: '208V/3ph', quality: 'general' },
 
   // Pneumatic woodworking tools
   { manufacturer: 'Senco', model: 'FinishPro 42XP', variants: ['FinishPro', 'Senco nailer', '42XP'], category: 'woodworking', subcategory: 'pneumatic_nailer', cfm_min: 1, cfm_max: 3, cfm_typical: 2, psi: 100, duty: 30, hp: null, axes: null, voltage: null, quality: 'general' },
@@ -530,6 +539,79 @@ const DETAILS = {
     system_notes: 'DNM 5700 is Doosan\'s big-envelope play. Shops bought it for value — they\'ll respond to ROI arguments on air.',
     key_selling_points: ['You saved on the machine versus a Mazak or DMG Mori. Now invest that savings where it protects your throughput.', 'Mold base work on a DNM 5700 means long cycles. One pressure drop mid-cycle = one scrapped mold base.'],
     common_objections: ['We already have a big compressor from the last machine', 'Doosan dealer said our air was fine'],
+  },
+
+  // ── Swiss-type lathes ──
+
+  'Star:SR-20': {
+    description: 'Industry-standard Swiss-type automatic lathe. Guide bushing design for ultra-precise small-diameter work. Shops running these typically have 4-8 machines in a cell.',
+    typical_applications: ['medical screws', 'watch components', 'electronic connectors', 'dental implants', 'aerospace fasteners'],
+    industries: ['medical', 'aerospace', 'electronics', 'dental', 'watchmaking'],
+    air_usage_notes: 'Bar feeder indexing, sub-spindle transfer, parts catcher ejection, and chip management all pneumatic. Individual CFM is modest but Swiss shops run many machines simultaneously.',
+    common_air_problems: ['moisture in guide bushing causing micro-diameter accuracy drift', 'pressure fluctuations during bar feeder index across multi-machine cell', 'oil contamination degrading pneumatic parts catcher timing'],
+    recommended_air_quality: 'Dried and filtered air mandatory — guide bushing tolerances are measured in microns. Moisture causes thermal expansion issues at these tolerances.',
+    recommended_compressor: 'JRS-10E',
+    recommended_dryer: 'JRD-40',
+    recommended_filters: ['Coalescing filter recommended — guide bushing and pneumatic valve protection'],
+    system_notes: 'Swiss shops almost never have just one machine. Size for the cell: 4-8 machines × 8 CFM = 32-64 CFM sustained. A JRS-15E is often the right call.',
+    key_selling_points: ['A guide bushing costs $200 but moisture-induced accuracy drift scraps $50K worth of medical parts before anyone notices.', 'You have 6 Swiss machines. That bar feeder indexes every 45 seconds on each one. Your compressor sees 6 simultaneous demand spikes every minute.'],
+    common_objections: ['Each machine barely uses any air', 'We have a dryer already'],
+  },
+  'Citizen:L20': {
+    description: 'Citizen Cincom L20 — premium Swiss-type lathe with up to 13 axes. Dominant in medical and aerospace precision turning. Sub-spindle and back-working capability drives complex air demand.',
+    typical_applications: ['medical implants', 'bone screws', 'aerospace fittings', 'precision shafts', 'miniature components'],
+    industries: ['medical', 'aerospace', 'defense', 'electronics', 'automotive precision'],
+    air_usage_notes: 'Back-working operations on sub-spindle mean the machine never stops consuming air during the cycle. Citizen\'s Cincom control coordinates pneumatic events tightly — timing-sensitive to pressure consistency.',
+    common_air_problems: ['sub-spindle transfer failures from micro-pressure drops — scraps a part that\'s 80% complete', 'shops add machines faster than they upsize air — the 6th L20 is the one that breaks the system'],
+    recommended_air_quality: 'ISO 8573 Class 2 — medical/aerospace work demands documented air quality',
+    recommended_compressor: 'JRS-15E',
+    recommended_dryer: 'JRD-80',
+    recommended_filters: ['Coalescing + particulate filtration for medical/aerospace compliance'],
+    system_notes: 'Citizen L20 shops are high-end. ISO 13485 or AS9100 certified. They document everything including air quality. Sell on compliance and traceability.',
+    key_selling_points: ['A sub-spindle transfer failure on an L20 scraps a part that\'s had 3 minutes of precision work. That adds up fast at 400 parts/day.', 'Your ISO 13485 auditor will ask about air quality. Having the documentation ready is worth the conversation.'],
+    common_objections: ['Citizen spec says 90 PSI and we provide that', 'Our machines have been running fine for years'],
+  },
+  'Tsugami:M08': {
+    description: 'Compact Swiss-type lathe for small-diameter precision work. Popular entry point into Swiss turning — shops often start with an M08 and expand.',
+    typical_applications: ['small precision parts', 'electronic pins', 'medical screws', 'watch stems'],
+    industries: ['electronics', 'medical', 'automotive precision', 'watchmaking'],
+    air_usage_notes: 'Lower individual air demand than larger Swiss machines but same sensitivity to air quality. Bar feeder and parts catcher are primary consumers.',
+    common_air_problems: ['sharing air with non-precision equipment causes quality issues the operator can\'t diagnose', 'piston compressor cycling causes micro-pressure fluctuations that affect part tolerances'],
+    recommended_air_quality: 'Dried air mandatory — even on entry-level Swiss, guide bushing accuracy depends on stable, dry air',
+    recommended_compressor: 'JRS-7.5E',
+    recommended_dryer: 'JRD-40',
+    system_notes: 'M08 is the gateway Swiss machine. If they bought one, more are coming. Size for at least 3 machines.',
+    key_selling_points: ['The M08 is your first Swiss machine — your air system needs to grow with your Swiss cell.', 'Swiss precision and a piston compressor don\'t belong in the same sentence. Upgrade now before you add the second machine.'],
+    common_objections: ['It\'s a small machine, barely uses air', 'We\'ll upgrade when we add more machines'],
+  },
+
+  // ── Edge banders ──
+
+  'Holz-Her:Lumina 1596': {
+    description: 'High-end edge bander with pre-milling, corner rounding, and glue scraping. Continuous air demand during production runs — pneumatic presses, trimming units, and return conveyors all run simultaneously.',
+    typical_applications: ['cabinet production', 'furniture manufacturing', 'architectural millwork', 'commercial casework'],
+    industries: ['woodworking', 'cabinet making', 'furniture', 'commercial millwork'],
+    air_usage_notes: 'Continuous pneumatic demand from pressure rollers, trim units, and edge scraping. Feed rate drives demand — faster feed = more air events per minute. Glue pot heating is electric but application pressure is pneumatic.',
+    common_air_problems: ['pressure drops causing inconsistent edge bond — visible glue lines', 'moisture in air causing edge tape adhesion failures in humid shops', 'sharing air with CNC router and panel saw creates pressure fights during simultaneous operation'],
+    recommended_air_quality: 'Dried air recommended — moisture causes edge tape delamination and glue application inconsistency',
+    recommended_compressor: 'JRS-10E',
+    recommended_dryer: 'JRD-40',
+    system_notes: 'Edge banders are part of a production line. They run alongside panel saws, CNC routers, and boring machines. Size for the whole line, not just the bander.',
+    key_selling_points: ['A visible glue line on a $3,000 kitchen cabinet is a callback. Clean dry air prevents it.', 'Your edge bander, CNC router, and panel saw are all on the same air line. When the router starts a tool change while the bander is running, something has to give.'],
+    common_objections: ['Our edge quality is fine', 'The edge bander came with the shop'],
+  },
+  'Biesse:Akron 1100': {
+    description: 'Industrial edge bander for high-volume cabinet and panel production. Multiple pneumatic stations — pre-milling, gluing, trimming, scraping, buffing — all running in sequence during each panel pass.',
+    typical_applications: ['high-volume cabinet production', 'panel processing', 'industrial furniture', 'store fixtures'],
+    industries: ['cabinet manufacturing', 'contract furniture', 'retail fixtures', 'commercial millwork'],
+    air_usage_notes: 'Higher sustained air demand than smaller banders due to more processing stations. Each station has its own pneumatic actuators. Running at full feed rate with all stations active is the worst-case air scenario.',
+    common_air_problems: ['trimming unit chatter from pressure fluctuations — leaves rough edge that requires hand sanding', 'glue application inconsistency causing edge failures in QC', 'pressure drops when running alongside Biesse Rover CNC router'],
+    recommended_air_quality: 'Dried air mandatory for consistent glue bond and trim quality',
+    recommended_compressor: 'JRS-10E',
+    recommended_dryer: 'JRD-40',
+    system_notes: 'Biesse Akron shops often have a Biesse CNC router too. They bought into the ecosystem. Quote the whole Biesse cell.',
+    key_selling_points: ['Every panel through the Akron gets 6 pneumatic operations. At 15 panels per minute, that\'s 90 air events per minute sustained.', 'Biesse shops usually have a Rover CNC on the same line. Size the air for both — they run simultaneously all day.'],
+    common_objections: ['The Biesse installer set up our air', 'We only run one shift'],
   },
 };
 
