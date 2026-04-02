@@ -152,7 +152,7 @@ describe('insertEquipment', () => {
     expect(mockClient.release).toHaveBeenCalled();
   });
 
-  it('passes all 13 equipment_details columns including key_selling_points and common_objections', async () => {
+  it('passes all 13 INSERT params (equipment_id + 12 detail fields) including key_selling_points and common_objections', async () => {
     mockClient.query
       .mockResolvedValueOnce(undefined) // BEGIN
       .mockResolvedValueOnce({ rows: [{ id: 99 }] }) // INSERT catalog
@@ -189,11 +189,17 @@ describe('insertEquipment', () => {
     expect(sql).toContain('key_selling_points');
     expect(sql).toContain('common_objections');
 
-    // 13 params: equipment_id + 12 detail fields
+    // 13 params: equipment_id(0), description(1), typical_applications(2),
+    // industries(3), air_usage_notes(4), common_air_problems(5),
+    // recommended_air_quality(6), recommended_compressor(7), recommended_dryer(8),
+    // recommended_filters(9), system_notes(10), key_selling_points(11),
+    // common_objections(12)
     expect(params).toHaveLength(13);
-    expect(params[0]).toBe(99); // equipment_id
-    expect(params[11]).toEqual(['Moisture is the #1 issue', 'Size for growth']);
-    expect(params[12]).toEqual(['Already have a piston compressor', 'Getting quotes from Kaeser']);
+    expect(params[0]).toBe(99);
+    expect(params[1]).toBe(allDetails.description);
+    expect(params[10]).toBe(allDetails.system_notes);
+    expect(params[11]).toEqual(allDetails.key_selling_points);
+    expect(params[12]).toEqual(allDetails.common_objections);
   });
 
   it('rolls back on error', async () => {
