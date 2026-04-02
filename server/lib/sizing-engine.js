@@ -5,9 +5,10 @@
  * map to CAS product catalog.
  */
 
-const { COMPRESSOR_CATALOG } = require('./compressor-catalog');
+const { COMPRESSOR_CATALOG, PM_VSD } = require('./compressor-catalog');
 
-const SAFETY_FACTOR = 1.25; // Industry standard: 25% buffer for leaks + growth
+const SAFETY_FACTOR = 1.25;          // Industry standard: 25% buffer for leaks + growth
+const OVERSIZE_THRESHOLD = 1.20;     // 20% over demand triggers PM/VSD upsell note
 
 // CAS refrigerated air dryers.
 // 30-100 CFM: stocked, ~45% gross margin, ecommerce.
@@ -186,6 +187,21 @@ function recommendSystem(demand) {
     notes.push(`High PSI requirement (${demand.maxPsi}) — verify equipment specs`);
   }
 
+  // PM/VSD upsell — when RS Open Frame is significantly oversized, a VSD
+  // matches output to actual demand and saves 20-35% energy at partial load.
+  // When pmVsdAlternative is set, the UI renders a dedicated card — no note needed.
+  let pmVsdAlternative = null;
+  if (!parallelConfig && compressor.productLine === 'rs_open') {
+    const oversizeRatio = compressor.cfm / demand.adjustedCfm;
+    if (oversizeRatio >= OVERSIZE_THRESHOLD) {
+      const vsdAlt = PM_VSD.find(c => c.cfm >= demand.adjustedCfm);
+      if (vsdAlt) {
+        const pct = Math.round((oversizeRatio - 1) * 100);
+        pmVsdAlternative = { ...vsdAlt, rsOversizePct: pct };
+      }
+    }
+  }
+
   // OWS upsell note — after warnings so it doesn't bury important info
   if (ows.price != null && ows.serviceKitPrice != null) {
     const subPrice = Math.round(ows.serviceKitPrice * 0.9);
@@ -197,6 +213,7 @@ function recommendSystem(demand) {
   return {
     compressor: { ...compressor },
     parallelConfig,
+    pmVsdAlternative,
     dryer: { ...dryer },
     filters: filters.map(f => ({ ...f })),
     ows: { ...ows },
@@ -292,6 +309,7 @@ module.exports = {
   selectFilter,
   selectOws,
   SAFETY_FACTOR,
+  OVERSIZE_THRESHOLD,
   COMPRESSOR_CATALOG,
   DRYER_CATALOG,
   DESICCANT_CATALOG,

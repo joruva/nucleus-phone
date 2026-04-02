@@ -694,6 +694,67 @@ describe('DESICCANT_REQUIRED', () => {
   });
 });
 
+describe('PM/VSD upsell alternative', () => {
+  it('sets pmVsdAlternative when RS Open Frame is 20%+ oversized', () => {
+    // demand = 55 CFM adjusted → RS picks JRS-20E (78 CFM, 42% over)
+    // PM/VSD alternative: JVSD-20 (71 CFM)
+    const demand = calculateDemand([{ cfm_typical: 44, duty_cycle_pct: 100, count: 1 }]);
+    expect(demand.adjustedCfm).toBe(55);
+    const rec = recommendSystem(demand);
+    expect(rec.compressor.model).toBe('JRS-20E');
+    expect(rec.compressor.cfm).toBe(78);
+    expect(rec.pmVsdAlternative).not.toBeNull();
+    expect(rec.pmVsdAlternative.model).toBe('JVSD-20');
+    expect(rec.pmVsdAlternative.rsOversizePct).toBe(42);
+  });
+
+  it('sets pmVsdAlternative for large RS gap (JRS-75 at 285 CFM for 211 demand)', () => {
+    // 168.8 * 1.25 = 211 → JRS-75 (285 CFM, 35% over)
+    const demand = calculateDemand([{ cfm_typical: 168.8, duty_cycle_pct: 100, count: 1 }]);
+    expect(demand.adjustedCfm).toBe(211);
+    const rec = recommendSystem(demand);
+    expect(rec.compressor.model).toBe('JRS-75');
+    expect(rec.pmVsdAlternative).not.toBeNull();
+    expect(rec.pmVsdAlternative.model).toBe('JVSD-60');
+    expect(rec.pmVsdAlternative.rsOversizePct).toBe(35);
+  });
+
+  it('does NOT trigger when RS is tightly sized (4% over, below threshold)', () => {
+    // 60 * 1.25 = 75 → JRS-20E (78 CFM, 4% over)
+    const demand = calculateDemand([{ cfm_typical: 60, duty_cycle_pct: 100, count: 1 }]);
+    expect(demand.adjustedCfm).toBe(75);
+    const rec = recommendSystem(demand);
+    expect(rec.compressor.model).toBe('JRS-20E');
+    expect(rec.pmVsdAlternative).toBeNull();
+  });
+
+  it('does NOT add note for parallel configurations', () => {
+    const demand = calculateDemand([{ cfm_typical: 100, duty_cycle_pct: 100, count: 20 }]);
+    const rec = recommendSystem(demand);
+    expect(rec.parallelConfig).not.toBeNull();
+    expect(rec.pmVsdAlternative).toBeNull();
+  });
+
+  it('does NOT trigger when RS is tightly sized (0% over, below threshold)', () => {
+    // 30 * 1.25 = 38 → JRS-10E (38 CFM, exactly meets demand)
+    const demand = calculateDemand([{ cfm_typical: 30, duty_cycle_pct: 100, count: 1 }]);
+    expect(demand.adjustedCfm).toBe(38);
+    const rec = recommendSystem(demand);
+    expect(rec.compressor.model).toBe('JRS-10E');
+    expect(rec.pmVsdAlternative).toBeNull();
+  });
+
+  it('includes rsOversizePct on the alternative object', () => {
+    // demand = 103. RS: JRS-30 (125 CFM). 125/103 = 1.21 → 21% over
+    const demand = { adjustedCfm: 103, maxPsi: 90, totalCfmAtDuty: 82, peakCfm: 103, adjustedPeak: 129, equipmentCount: 10 };
+    const rec = recommendSystem(demand);
+    expect(rec.compressor.model).toBe('JRS-30');
+    expect(rec.pmVsdAlternative.model).toBe('JVSD-30');
+    expect(rec.pmVsdAlternative.rsOversizePct).toBe(21);
+    expect(rec.pmVsdAlternative.cfm).toBe(109);
+  });
+});
+
 describe('application-aware dryer selection', () => {
   function sizeWithAirQuality(machines, airQualityClass) {
     const demand = calculateDemand(machines);

@@ -330,6 +330,50 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             </div>
           )}
 
+          {/* PM/VSD upsell card — when RS Open Frame is significantly oversized */}
+          {recommendation.pmVsdAlternative && (
+            <div
+              className="mt-3 px-3 py-2.5 rounded text-[11px] leading-relaxed"
+              style={{
+                background: 'var(--cockpit-violet-50, #f5f3ff)',
+                border: '1px solid var(--cockpit-violet-200, #ddd6fe)',
+                color: 'var(--cockpit-text-secondary)',
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span
+                  className="text-[10px] font-semibold tracking-[1px] px-1.5 py-0.5 rounded"
+                  style={{
+                    background: 'var(--cockpit-violet-100, #ede9fe)',
+                    color: 'var(--cockpit-violet-700, #6d28d9)',
+                  }}
+                >
+                  ENERGY UPGRADE
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className="font-semibold" style={{ color: 'var(--cockpit-text)' }}>
+                    {recommendation.pmVsdAlternative.model}
+                  </span>
+                  {' '}
+                  <span>
+                    {recommendation.pmVsdAlternative.hp} HP · {recommendation.pmVsdAlternative.cfm} CFM · Variable Speed
+                  </span>
+                </div>
+                <span
+                  className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: 'var(--cockpit-violet-100, #ede9fe)', color: 'var(--cockpit-violet-700, #6d28d9)' }}
+                >
+                  20-35% energy savings
+                </span>
+              </div>
+              <div className="mt-1" style={{ color: 'var(--cockpit-text-muted)' }}>
+                {recommendation.compressor.model} is {recommendation.pmVsdAlternative.rsOversizePct}% over demand — VSD matches output to actual usage, eliminating load/unload cycling waste.
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           {recommendation.notes?.length > 0 && (
             <div className="mt-2">
