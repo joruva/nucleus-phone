@@ -13,6 +13,7 @@ const USER_MAP = {
   'britt@joruva.com': { identity: 'britt', role: 'caller' },
   'ryann@joruva.com': { identity: 'ryann', role: 'caller' },
   'alex@joruva.com': { identity: 'alex', role: 'caller' },
+  'lily@joruva.com': { identity: 'lily', role: 'caller' },
 };
 
 // Valid Twilio identities — used by token endpoint to reject arbitrary strings.
