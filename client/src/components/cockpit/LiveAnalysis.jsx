@@ -324,6 +324,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             <div className="mt-3">
               <DirectSaleCTA
                 recommendation={recommendation}
+                equipment={equipment}
                 contactName={contact?.name}
                 contactCompany={contact?.company}
                 contactPhone={contact?.phone}

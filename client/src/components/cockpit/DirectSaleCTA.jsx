@@ -7,7 +7,7 @@
  */
 import { useState } from 'react';
 
-export default function DirectSaleCTA({ recommendation, contactName, contactCompany, contactPhone, callId }) {
+export default function DirectSaleCTA({ recommendation, equipment, contactName, contactCompany, contactPhone, callId }) {
   const [emailForm, setEmailForm] = useState(false);
   const [email, setEmail] = useState('');
   const [consent, setConsent] = useState(false);
@@ -26,6 +26,7 @@ export default function DirectSaleCTA({ recommendation, contactName, contactComp
           leadCompany: contactCompany,
           leadPhone: contactPhone,
           recommendation,
+          equipment,
         }),
       });
       if (res.ok) setStatus('audit-sent');
@@ -52,6 +53,7 @@ export default function DirectSaleCTA({ recommendation, contactName, contactComp
           leadCompany: contactCompany,
           leadPhone: contactPhone,
           recommendation,
+          equipment,
         }),
       });
       if (res.ok) setStatus('sent');
