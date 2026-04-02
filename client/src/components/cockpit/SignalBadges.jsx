@@ -48,8 +48,8 @@ export default function SignalBadges({ domain }) {
   badges.push(
     <span key="tier" className="signal-badge tier" style={{
       background: tierStyle.bg, color: tierStyle.color,
-      padding: '2px 8px', borderRadius: '3px', fontWeight: 'bold', fontSize: '11px',
-      letterSpacing: '0.5px',
+      padding: '2px 8px', borderRadius: '3px', fontWeight: '600', fontSize: '11px',
+      letterSpacing: '1.5px',
     }}>
       {tierStyle.label} · Score {meta.signal_score}
     </span>

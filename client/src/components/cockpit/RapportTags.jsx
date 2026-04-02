@@ -16,7 +16,7 @@ export default function RapportTags({ tags }) {
               border: '1px solid var(--cockpit-amber-100)',
             }}
           >
-            {icon && <span className="text-[13px]">{icon}</span>}
+            {icon && <span className="text-sm">{icon}</span>}
             {text}
           </span>
         );

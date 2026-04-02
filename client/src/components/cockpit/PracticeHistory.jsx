@@ -43,7 +43,7 @@ function HistoryRow({ score }) {
 
   return (
     <div
-      className="rounded-lg overflow-hidden transition-colors"
+      className="rounded overflow-hidden transition-colors"
       style={{ background: 'var(--cockpit-card)', border: '1px solid var(--cockpit-card-border)' }}
     >
       {/* Summary row */}
@@ -51,12 +51,12 @@ function HistoryRow({ score }) {
         onClick={() => setExpanded(!expanded)}
         className="w-full flex items-center gap-2 px-3 py-2.5 text-left cursor-pointer"
       >
-        <span className="text-[13px]">{emoji}</span>
-        <span className="text-[13px] font-semibold tabular-nums" style={{ color: 'var(--cockpit-text)' }}>
+        <span className="text-sm">{emoji}</span>
+        <span className="text-sm font-semibold tabular-nums" style={{ color: 'var(--cockpit-text)' }}>
           {score.score_overall ? Number(score.score_overall).toFixed(1) : '—'}
         </span>
         <span
-          className="text-[10px] font-medium px-1.5 py-[1px] rounded"
+          className="text-[11px] font-medium px-1.5 py-[1px] rounded"
           style={{ background: ds.bg, color: ds.color }}
         >
           {score.difficulty}
@@ -99,7 +99,7 @@ function HistoryRow({ score }) {
           {/* Debrief */}
           {score.caller_debrief && (
             <div
-              className="px-3 py-2 rounded text-[12px] leading-relaxed mt-1"
+              className="px-3 py-2 rounded text-xs leading-relaxed mt-1"
               style={{ background: 'var(--cockpit-purple-bg)', color: 'var(--cockpit-text)' }}
             >
               {score.caller_debrief}
@@ -157,7 +157,7 @@ export default function PracticeHistory({ identity, refreshKey }) {
   if (fetchError) {
     return (
       <div className="px-5 py-4 text-center">
-        <p className="text-[13px]" style={{ color: 'var(--cockpit-red-text)' }}>
+        <p className="text-sm" style={{ color: 'var(--cockpit-red-text)' }}>
           Failed to load practice history
         </p>
       </div>
@@ -167,7 +167,7 @@ export default function PracticeHistory({ identity, refreshKey }) {
   if (!scores.length) {
     return (
       <div className="px-5 py-4 text-center">
-        <p className="text-[13px]" style={{ color: 'var(--cockpit-text-muted)' }}>
+        <p className="text-sm" style={{ color: 'var(--cockpit-text-muted)' }}>
           No practice calls yet. Click Practice Call to start.
         </p>
       </div>
@@ -179,7 +179,7 @@ export default function PracticeHistory({ identity, refreshKey }) {
 
   return (
     <div className="px-5 py-3 flex flex-col gap-2">
-      <h3 className="text-[13px] font-semibold" style={{ color: 'var(--cockpit-text-secondary)' }}>
+      <h3 className="text-sm font-semibold" style={{ color: 'var(--cockpit-text-secondary)' }}>
         Recent practice calls
       </h3>
       {recent.map(s => <HistoryRow key={s.id} score={s} />)}

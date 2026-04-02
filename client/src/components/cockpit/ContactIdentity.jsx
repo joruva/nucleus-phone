@@ -19,7 +19,7 @@ export default function ContactIdentity({ identity }) {
         <img src={photo} alt={name} className="w-12 h-12 rounded-full object-cover shrink-0" />
       ) : (
         <div
-          className="w-12 h-12 rounded-full flex items-center justify-center text-white text-base font-semibold shrink-0"
+          className="w-12 h-12 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
           style={{ background: `linear-gradient(135deg, var(--cockpit-amber-600), var(--cockpit-orange-500))` }}
         >
           {initials}
@@ -27,7 +27,7 @@ export default function ContactIdentity({ identity }) {
       )}
       <div>
         <div className="flex items-center gap-2">
-          <span className="text-xl font-medium text-cp-text leading-tight">{name}</span>
+          <span className="text-lg font-semibold text-cp-text leading-tight">{name}</span>
           {linkedinUrl && (
             <a href={linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex" style={{ color: 'var(--cockpit-blue-500)' }}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

@@ -15,21 +15,21 @@ export default function ProductReference({ productReference }) {
         style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
+        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
           Recommended product
         </div>
         <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>
       </div>
       {open && (
         <div
-          className="rounded-lg py-2 px-3 transition-colors duration-300 bg-cp-card border border-cp-border"
+          className="rounded py-2 px-3 transition-colors duration-300 bg-cp-card border border-cp-border"
         >
           {products.map((product, i) => (
             <div key={i}>
               <div className="flex justify-between items-center mb-2.5">
-                <span className="text-sm font-medium text-cp-text">{product.name}</span>
+                <span className="text-sm font-normal text-cp-text">{product.name}</span>
                 {product.price && (
-                  <span className="text-[15px] font-semibold" style={{ color: 'var(--cockpit-green-500)' }}>
+                  <span className="text-sm font-semibold" style={{ color: 'var(--cockpit-green-500)' }}>
                     {product.price}
                   </span>
                 )}

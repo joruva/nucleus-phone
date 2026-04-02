@@ -35,7 +35,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
 
   return (
     <div
-      className="rounded-xl overflow-hidden transition-all duration-500 flex flex-col"
+      className="rounded overflow-hidden transition-all duration-500 flex flex-col"
       style={{
         border: `2px solid ${detected ? 'var(--cockpit-live-500)' : 'var(--cockpit-live-border)'}`,
         background: 'var(--cockpit-card)',
@@ -69,7 +69,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
         />
         {active && (
           <span
-            className="text-[9px] font-bold tracking-widest px-1.5 py-0.5 rounded"
+            className="text-[11px] font-semibold tracking-[1.5px] px-1.5 py-0.5 rounded"
             style={{
               background: detected ? 'rgba(255,255,255,0.25)' : 'var(--cockpit-live-badge-bg)',
               color: detected ? '#FFFFFF' : 'var(--cockpit-live-500)',
@@ -78,12 +78,12 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             LIVE
           </span>
         )}
-        <span className="text-[11px] font-semibold tracking-wide uppercase" style={{ color: detected ? '#FFFFFF' : 'var(--cockpit-live-900)' }}>
+        <span className="text-[11px] font-semibold tracking-[1.5px] uppercase" style={{ color: detected ? '#FFFFFF' : 'var(--cockpit-live-900)' }}>
           Live Analysis
         </span>
         {sizing && (
           <span
-            className="ml-auto text-[11px] font-bold px-2 py-0.5 rounded-full"
+            className="ml-auto text-[11px] font-semibold px-2 py-0.5 rounded-full"
             style={{
               background: detected ? 'rgba(255,255,255,0.2)' : 'var(--cockpit-live-badge-bg)',
               color: detected ? '#FFFFFF' : 'var(--cockpit-live-500)',
@@ -113,7 +113,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
                 }}
               />
             </div>
-            <p className="text-[14px] font-medium" style={{ color: 'var(--cockpit-live-900)' }}>
+            <p className="text-sm font-normal" style={{ color: 'var(--cockpit-live-900)' }}>
               {!active
                 ? 'Start a practice call to activate'
                 : connected
@@ -132,7 +132,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
       {/* ── Detected content ── */}
       {detected && (
         <div className="text-center py-2" style={{ background: 'var(--cockpit-live-bg)' }}>
-          <span className="text-[13px] font-bold" style={{ color: 'var(--cockpit-live-900)' }}>
+          <span className="text-sm font-semibold" style={{ color: 'var(--cockpit-live-900)' }}>
             {equipment.length} {equipment.length === 1 ? 'machine' : 'machines'} detected
           </span>
         </div>
@@ -144,7 +144,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
           {equipment.map((eq, i) => (
             <span
               key={`${eq.manufacturer}-${eq.model}-${i}`}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium"
               style={{
                 background: 'var(--cockpit-live-bg)',
                 color: 'var(--cockpit-live-900)',
@@ -156,14 +156,14 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
               <span>{eq.manufacturer} {eq.model}</span>
               {eq.count > 1 && (
                 <span
-                  className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                  className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full"
                   style={{ background: 'var(--cockpit-live-badge-bg)', color: 'var(--cockpit-live-500)' }}
                 >
                   &times;{eq.count}
                 </span>
               )}
               {eq.specs?.cfm_typical && (
-                <span className="text-[10px] font-medium" style={{ color: 'var(--cockpit-live-600)' }}>
+                <span className="text-[11px] font-medium" style={{ color: 'var(--cockpit-live-600)' }}>
                   {formatCfm(eq.specs.cfm_typical)}
                 </span>
               )}
@@ -185,26 +185,26 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
           }}
         >
           <div>
-            <div className="text-[10px] font-medium" style={{ color: 'var(--cockpit-live-600)' }}>DEMAND</div>
-            <div className="text-[15px] font-bold" style={{ color: 'var(--cockpit-live-900)' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: 'var(--cockpit-live-600)' }}>DEMAND</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--cockpit-live-900)' }}>
               {formatCfm(sizing.totalCfmAtDuty)}
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-medium" style={{ color: 'var(--cockpit-live-600)' }}>PEAK</div>
-            <div className="text-[15px] font-bold" style={{ color: 'var(--cockpit-live-900)' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: 'var(--cockpit-live-600)' }}>PEAK</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--cockpit-live-900)' }}>
               {formatCfm(sizing.peakCfm)}
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-medium" style={{ color: 'var(--cockpit-live-600)' }}>PRESSURE</div>
-            <div className="text-[15px] font-bold" style={{ color: 'var(--cockpit-live-900)' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: 'var(--cockpit-live-600)' }}>PRESSURE</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--cockpit-live-900)' }}>
               {sizing.maxPsi} PSI
             </div>
           </div>
           <div>
-            <div className="text-[10px] font-medium" style={{ color: 'var(--cockpit-live-600)' }}>MACHINES</div>
-            <div className="text-[15px] font-bold" style={{ color: 'var(--cockpit-live-900)' }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[1.5px]" style={{ color: 'var(--cockpit-live-600)' }}>MACHINES</div>
+            <div className="text-sm font-semibold" style={{ color: 'var(--cockpit-live-900)' }}>
               {sizing.equipmentCount}
             </div>
           </div>
@@ -218,7 +218,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
           style={{ borderTop: '1px solid var(--cockpit-live-border)' }}
         >
           <div
-            className="text-[10px] font-bold tracking-widest mb-2"
+            className="text-[11px] font-semibold tracking-[1.5px] uppercase mb-2"
             style={{ color: 'var(--cockpit-live-500)' }}
           >
             RECOMMENDED SYSTEM
@@ -226,19 +226,19 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
 
           {/* Compressor hero */}
           <div
-            className="flex items-center justify-between gap-3 px-4 py-3 rounded-lg"
+            className="flex items-center justify-between gap-3 px-4 py-3 rounded"
             style={{
               background: 'var(--cockpit-live-bg)',
               border: '1px solid var(--cockpit-live-border)',
             }}
           >
             <div>
-              <div className="text-[16px] font-bold" style={{ color: 'var(--cockpit-text)' }}>
+              <div className="text-sm font-semibold" style={{ color: 'var(--cockpit-text)' }}>
                 {recommendation.parallelConfig
                   ? `${recommendation.parallelConfig.unitCount}x ${recommendation.compressor.model}`
                   : recommendation.compressor.model}
               </div>
-              <div className="text-[12px] mt-0.5" style={{ color: 'var(--cockpit-text-secondary)' }}>
+              <div className="text-xs mt-0.5" style={{ color: 'var(--cockpit-text-secondary)' }}>
                 {recommendation.parallelConfig
                   ? `${recommendation.compressor.hp} HP each · ${recommendation.parallelConfig.totalCfm} CFM total · Parallel configuration`
                   : `${recommendation.compressor.hp} HP · ${recommendation.compressor.cfm} CFM · ${recommendation.compressor.voltage || '460V/3ph'}`}
@@ -247,13 +247,13 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             <div className="text-right shrink-0">
               {recommendation.salesChannel === 'direct' ? (
                 <span
-                  className="text-[11px] font-bold px-2.5 py-1 rounded-full"
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
                   style={{ background: 'var(--cockpit-amber-50)', color: 'var(--cockpit-amber-900)', border: '1px solid var(--cockpit-amber-100)' }}
                 >
                   Direct Sale
                 </span>
               ) : (
-                <div className="text-[18px] font-bold" style={{ color: 'var(--cockpit-live-500)' }}>
+                <div className="text-sm font-semibold" style={{ color: 'var(--cockpit-live-500)' }}>
                   {formatPrice(recommendation.compressor.price)}
                 </div>
               )}
@@ -265,7 +265,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             <div className="flex flex-wrap gap-2 mt-3">
               {recommendation.dryer && (
                 <span
-                  className="text-[11px] font-medium px-2.5 py-1 rounded-lg"
+                  className="text-[11px] font-medium px-2.5 py-1 rounded"
                   style={{
                     background: 'var(--cockpit-live-badge-bg)',
                     color: 'var(--cockpit-live-900)',
@@ -278,7 +278,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
               {recommendation.filters?.map((f, i) => (
                 <span
                   key={i}
-                  className="text-[11px] font-medium px-2.5 py-1 rounded-lg"
+                  className="text-[11px] font-medium px-2.5 py-1 rounded"
                   style={{
                     background: 'var(--cockpit-live-badge-bg)',
                     color: 'var(--cockpit-live-900)',
@@ -294,14 +294,14 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
           {/* Desiccant upgrade callout */}
           {recommendation.desiccantUpgrade && (
             <div
-              className="mt-3 px-3 py-2 rounded-lg text-[11px] leading-relaxed"
+              className="mt-3 px-3 py-2 rounded text-[11px] leading-relaxed"
               style={{
                 background: 'var(--cockpit-amber-50)',
                 border: '1px solid var(--cockpit-amber-100)',
                 color: 'var(--cockpit-amber-900)',
               }}
             >
-              <span className="font-bold">UPSELL:</span>{' '}
+              <span className="font-semibold">UPSELL:</span>{' '}
               {recommendation.desiccantUpgrade.model} desiccant dryer ({formatPrice(recommendation.desiccantUpgrade.price)})
               — molecular sieve media, {recommendation.desiccantUpgrade.dewpoint}°F dewpoint.
               Billet aluminum, wall mount, 1/3 size of conventional. For AS9100/pharma.

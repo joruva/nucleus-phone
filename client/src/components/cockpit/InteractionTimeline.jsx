@@ -57,14 +57,14 @@ export default function InteractionTimeline({ interactionHistory, priorCalls }) 
         style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
+        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
           Timeline ({entries.length})
         </div>
         <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>
       </div>
       {open && (
         <div
-          className="rounded-lg py-2.5 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
+          className="rounded py-2.5 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
         >
           {visible.map((e, i) => {
             const badge = OUTCOME_BADGES[e.outcome] || OUTCOME_BADGES.info;
@@ -78,11 +78,11 @@ export default function InteractionTimeline({ interactionHistory, priorCalls }) 
                 <span className="text-xs text-cp-text-muted min-w-[48px] shrink-0">
                   {formatDate(e.date)}
                 </span>
-                <span className="text-[13px] text-cp-text-secondary flex-1 truncate">
-                  <strong className="font-medium text-cp-text">{e.agent}</strong> — {e.action}
+                <span className="text-sm text-cp-text-secondary flex-1 truncate">
+                  <strong className="font-semibold text-cp-text">{e.agent}</strong> — {e.action}
                 </span>
                 <span
-                  className="inline-flex items-center px-2 py-[2px] rounded-xl text-[11px] font-medium shrink-0"
+                  className="inline-flex items-center px-2 py-[2px] rounded text-[11px] font-medium shrink-0"
                   style={{ background: badge.bg, color: badge.color }}
                 >
                   {badge.label}

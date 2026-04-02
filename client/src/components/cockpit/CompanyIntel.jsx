@@ -41,14 +41,14 @@ export default function CompanyIntel({ companyData, icpScore, pipelineData }) {
         style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider">
+        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
           Company intel
         </div>
         <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>
       </div>
       {open && (
         <div
-          className="rounded-lg py-2.5 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
+          className="rounded py-2.5 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
         >
           {rows.map(([label, value], i) => (
             <div
@@ -56,8 +56,8 @@ export default function CompanyIntel({ companyData, icpScore, pipelineData }) {
               className="flex justify-between py-1.5"
               style={{ borderBottom: i < rows.length - 1 ? '1px solid var(--cockpit-card-border)' : 'none' }}
             >
-              <span className="text-[13px] text-cp-text-muted capitalize">{label}</span>
-              <span className="text-[13px] font-medium text-cp-text text-right">{value}</span>
+              <span className="text-sm text-cp-text-muted capitalize">{label}</span>
+              <span className="text-sm font-normal text-cp-text text-right">{value}</span>
             </div>
           ))}
         </div>

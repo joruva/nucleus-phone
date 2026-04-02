@@ -173,7 +173,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
       <div className="flex flex-col items-center gap-2 w-full max-w-[400px] mx-auto">
         <button
           onClick={() => setPhase('selecting')}
-          className="w-full py-3 rounded-lg text-[15px] font-semibold text-white flex items-center justify-center gap-2 cursor-pointer transition-opacity"
+          className="w-full py-3 rounded text-sm font-semibold text-white flex items-center justify-center gap-2 cursor-pointer transition-opacity"
           style={{ background: 'var(--cockpit-purple-600)' }}
         >
           🎯 Practice Call
@@ -187,7 +187,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
     return (
       <div className="flex flex-col gap-2 w-full max-w-[400px] mx-auto">
         {/* Mode toggle */}
-        <div className="flex items-center justify-center gap-1 p-0.5 rounded-lg mb-1"
+        <div className="flex items-center justify-center gap-1 p-0.5 rounded mb-1"
           style={{ background: 'var(--cockpit-card)', border: '1px solid var(--cockpit-card-border)' }}
         >
           {[
@@ -197,7 +197,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
             <button
               key={m.key}
               onClick={() => setCallMode(m.key)}
-              className="flex-1 py-1.5 rounded-md text-[12px] font-medium cursor-pointer transition-colors"
+              className="flex-1 py-1.5 rounded-md text-xs font-medium cursor-pointer transition-colors"
               style={{
                 background: callMode === m.key ? 'var(--cockpit-purple-bg)' : 'transparent',
                 color: callMode === m.key ? 'var(--cockpit-purple-900)' : 'var(--cockpit-text-muted)',
@@ -209,30 +209,30 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
           ))}
         </div>
 
-        <p className="text-[13px] font-medium text-center" style={{ color: 'var(--cockpit-text-secondary)' }}>
+        <p className="text-sm font-normal text-center" style={{ color: 'var(--cockpit-text-secondary)' }}>
           Choose difficulty
         </p>
         {DIFFICULTIES.map(d => (
           <button
             key={d.key}
             onClick={() => handleStart(d.key)}
-            className="w-full py-2.5 px-4 rounded-lg text-left transition-colors cursor-pointer"
+            className="w-full py-2.5 px-4 rounded text-left transition-colors cursor-pointer"
             style={{
               background: 'var(--cockpit-purple-bg)',
               border: '1px solid var(--cockpit-purple-border)',
             }}
           >
-            <span className="text-[14px] font-semibold" style={{ color: 'var(--cockpit-purple-900)' }}>
+            <span className="text-sm font-semibold" style={{ color: 'var(--cockpit-purple-900)' }}>
               {d.label}
             </span>
-            <span className="block text-[12px] mt-0.5" style={{ color: 'var(--cockpit-text-muted)' }}>
+            <span className="block text-xs mt-0.5" style={{ color: 'var(--cockpit-text-muted)' }}>
               {d.desc}
             </span>
           </button>
         ))}
         <button
           onClick={handleReset}
-          className="text-[12px] mt-1 cursor-pointer"
+          className="text-xs mt-1 cursor-pointer"
           style={{ color: 'var(--cockpit-text-muted)' }}
         >
           Cancel
@@ -246,7 +246,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
     return (
       <div className="flex flex-col items-center gap-3 w-full max-w-[400px] mx-auto">
         <div
-          className="flex items-center gap-3 w-full px-6 py-3 rounded-lg justify-center"
+          className="flex items-center gap-3 w-full px-6 py-3 rounded justify-center"
           style={{
             background: 'var(--cockpit-purple-bg)',
             border: '1px solid var(--cockpit-purple-border)',
@@ -256,7 +256,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
             className="w-2.5 h-2.5 rounded-full animate-pulse"
             style={{ background: 'var(--cockpit-purple-500)' }}
           />
-          <span className="text-sm font-medium" style={{ color: 'var(--cockpit-purple-900)' }}>
+          <span className="text-sm font-normal" style={{ color: 'var(--cockpit-purple-900)' }}>
             {phase === 'connecting'
               ? (callMode === 'browser' ? 'Connecting browser audio...' : 'Calling your phone...')
               : (callMode === 'browser' ? '🔊 Practice call — browser audio' : 'Practice call in progress')}
@@ -264,7 +264,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
         </div>
         <button
           onClick={handleCancel}
-          className="text-[12px] cursor-pointer px-3 py-1 rounded"
+          className="text-xs cursor-pointer px-3 py-1 rounded"
           style={{ color: 'var(--cockpit-red-text)', background: 'var(--cockpit-red-bg)' }}
         >
           Cancel practice
@@ -276,7 +276,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
   // ─── Scoring ──────────────────────────────────
   if (phase === 'scoring') {
     return (
-      <div className="flex items-center gap-3 w-full max-w-[400px] mx-auto px-6 py-3 rounded-lg justify-center"
+      <div className="flex items-center gap-3 w-full max-w-[400px] mx-auto px-6 py-3 rounded justify-center"
         style={{
           background: 'var(--cockpit-purple-bg)',
           border: '1px solid var(--cockpit-purple-border)',
@@ -286,7 +286,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
         </svg>
-        <span className="text-sm font-medium" style={{ color: 'var(--cockpit-purple-900)' }}>
+        <span className="text-sm font-normal" style={{ color: 'var(--cockpit-purple-900)' }}>
           Scoring your call...
         </span>
       </div>
@@ -300,7 +300,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
       <div className="flex flex-col gap-3 w-full max-w-[440px] mx-auto">
         {/* Grade header */}
         <div
-          className="flex items-center justify-between px-4 py-3 rounded-lg"
+          className="flex items-center justify-between px-4 py-3 rounded"
           style={{
             background: 'var(--cockpit-purple-bg)',
             border: '1px solid var(--cockpit-purple-border)',
@@ -309,16 +309,16 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
           <div className="flex items-center gap-2">
             <span className="text-2xl">{emoji}</span>
             <div>
-              <span className="text-[20px] font-bold" style={{ color: 'var(--cockpit-purple-900)' }}>
+              <span className="text-lg font-semibold" style={{ color: 'var(--cockpit-purple-900)' }}>
                 Grade: {result.grade}
               </span>
-              <span className="text-[13px] ml-2" style={{ color: 'var(--cockpit-text-muted)' }}>
+              <span className="text-sm ml-2" style={{ color: 'var(--cockpit-text-muted)' }}>
                 {result.score_overall}/10
               </span>
             </div>
           </div>
           {result.duration_seconds && (
-            <span className="text-[12px]" style={{ color: 'var(--cockpit-text-muted)' }}>
+            <span className="text-xs" style={{ color: 'var(--cockpit-text-muted)' }}>
               {Math.floor(result.duration_seconds / 60)}m {String(result.duration_seconds % 60).padStart(2, '0')}s
             </span>
           )}
@@ -327,7 +327,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
         {/* Debrief */}
         {result.caller_debrief && (
           <div
-            className="px-4 py-3 rounded-lg text-[13px] leading-relaxed"
+            className="px-4 py-3 rounded text-sm leading-relaxed"
             style={{
               background: 'var(--cockpit-card)',
               border: '1px solid var(--cockpit-card-border)',
@@ -342,7 +342,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
         {(result.top_strength || result.top_improvement) && (
           <div className="flex flex-col gap-1.5">
             {result.top_strength && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg text-[12px]"
+              <div className="flex items-start gap-2 px-3 py-2 rounded text-xs"
                 style={{ background: 'var(--cockpit-green-50)' }}
               >
                 <span>💪</span>
@@ -350,7 +350,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
               </div>
             )}
             {result.top_improvement && (
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg text-[12px]"
+              <div className="flex items-start gap-2 px-3 py-2 rounded text-xs"
                 style={{ background: 'var(--cockpit-amber-50)' }}
               >
                 <span>🎯</span>
@@ -363,7 +363,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
         {/* Practice again */}
         <button
           onClick={handleReset}
-          className="w-full py-2.5 rounded-lg text-[14px] font-semibold text-white cursor-pointer transition-opacity"
+          className="w-full py-2.5 rounded text-sm font-semibold text-white cursor-pointer transition-opacity"
           style={{ background: 'var(--cockpit-purple-600)' }}
         >
           Practice again
@@ -376,12 +376,12 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
   if (phase === 'error') {
     return (
       <div className="flex flex-col items-center gap-2 w-full max-w-[400px] mx-auto">
-        <p className="text-[13px] px-3 py-2 rounded-lg" style={{ color: 'var(--cockpit-red-text)', background: 'var(--cockpit-red-bg)' }}>
+        <p className="text-sm px-3 py-2 rounded" style={{ color: 'var(--cockpit-red-text)', background: 'var(--cockpit-red-bg)' }}>
           {errorMsg}
         </p>
         <button
           onClick={handleReset}
-          className="text-[13px] cursor-pointer"
+          className="text-sm cursor-pointer"
           style={{ color: 'var(--cockpit-purple-500)' }}
         >
           Try again

@@ -39,11 +39,11 @@ export default function QualScript({ adaptedScript }) {
 
   return (
     <div className="mb-3">
-      <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-wider mb-1.5">
+      <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px] mb-1.5">
         Qual script — {done}/{total}
       </div>
       <div
-        className="rounded-lg py-3 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
+        className="rounded py-3 px-3.5 transition-colors duration-300 bg-cp-card border border-cp-border"
       >
         <div className="h-1 rounded-sm mb-2.5" style={{ background: 'var(--cockpit-gray-100)' }}>
           <div
