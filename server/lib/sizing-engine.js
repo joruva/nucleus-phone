@@ -176,8 +176,6 @@ function recommendSystem(demand) {
   const ows = selectOws(dryerCfm);
 
   const notes = [];
-  const subPrice = Math.round(ows.serviceKitPrice * 0.9);
-  notes.push(`${ows.model} oil-water separator ($${ows.price.toLocaleString()}) + ${ows.serviceKit} service kit subscription ($${subPrice.toLocaleString()}/interval, saves 10%)`);
 
   // Flag undersized dryer in parallel configs
   if (parallelConfig && dryer.cfm < parallelConfig.totalCfm) {
@@ -186,6 +184,14 @@ function recommendSystem(demand) {
 
   if (demand.maxPsi > 125) {
     notes.push(`High PSI requirement (${demand.maxPsi}) — verify equipment specs`);
+  }
+
+  // OWS upsell note — after warnings so it doesn't bury important info
+  if (ows.price != null && ows.serviceKitPrice != null) {
+    const subPrice = Math.round(ows.serviceKitPrice * 0.9);
+    notes.push(`${ows.model} oil-water separator ($${ows.price.toLocaleString()}) + service kit subscription ($${subPrice.toLocaleString()}, saves 10%)`);
+  } else {
+    notes.push(`${ows.model} oil-water separator — pricing on request. Service kit subscription saves 10%.`);
   }
 
   return {

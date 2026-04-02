@@ -647,7 +647,9 @@ describe('OWS_CATALOG', () => {
       expect(entry).toHaveProperty('maxCfm');
       expect(entry).toHaveProperty('price');
       expect(entry).toHaveProperty('serviceKit');
+      expect(entry).toHaveProperty('serviceKitPrice');
       expect(entry.price).toBeGreaterThan(0);
+      expect(entry.serviceKitPrice).toBeGreaterThan(0);
       expect(['ecommerce', 'direct']).toContain(entry.salesChannel);
       expect(['confirmed', 'quote_required']).toContain(entry.pricingStatus);
     }
