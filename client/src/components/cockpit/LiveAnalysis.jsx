@@ -260,19 +260,27 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             </div>
           </div>
 
-          {/* Dryer / filters */}
-          {(recommendation.dryer || recommendation.filters?.length > 0) && (
+          {/* Dryer / filters / OWS */}
+          {(recommendation.dryer || recommendation.filters?.length > 0 || recommendation.ows) && (
             <div className="flex flex-wrap gap-2 mt-3">
               {recommendation.dryer && (
                 <span
                   className="text-[11px] font-medium px-2.5 py-1 rounded"
                   style={{
-                    background: 'var(--cockpit-live-badge-bg)',
-                    color: 'var(--cockpit-live-900)',
-                    border: '1px solid var(--cockpit-live-border)',
+                    background: recommendation.dryerType === 'desiccant'
+                      ? 'var(--cockpit-amber-50)'
+                      : 'var(--cockpit-live-badge-bg)',
+                    color: recommendation.dryerType === 'desiccant'
+                      ? 'var(--cockpit-amber-900)'
+                      : 'var(--cockpit-live-900)',
+                    border: recommendation.dryerType === 'desiccant'
+                      ? '1px solid var(--cockpit-amber-100)'
+                      : '1px solid var(--cockpit-live-border)',
                   }}
                 >
-                  + {recommendation.dryer.model}{recommendation.dryer.price != null ? ` (${formatPrice(recommendation.dryer.price)})` : ''}
+                  + {recommendation.dryer.model}
+                  {recommendation.dryerType === 'desiccant' ? ' (desiccant)' : ''}
+                  {recommendation.dryer.price != null ? ` (${formatPrice(recommendation.dryer.price)})` : ''}
                 </span>
               )}
               {recommendation.filters?.map((f, i) => (
@@ -288,23 +296,34 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
                   + {typeof f === 'string' ? f : `${f.model}${f.price != null ? ` (${formatPrice(f.price)})` : ''}`}
                 </span>
               ))}
+              {recommendation.ows && (
+                <span
+                  className="text-[11px] font-medium px-2.5 py-1 rounded"
+                  style={{
+                    background: 'var(--cockpit-live-badge-bg)',
+                    color: 'var(--cockpit-live-900)',
+                    border: '1px solid var(--cockpit-live-border)',
+                  }}
+                >
+                  + {recommendation.ows.model} OWS{recommendation.ows.price != null ? ` (${formatPrice(recommendation.ows.price)})` : ''}
+                </span>
+              )}
             </div>
           )}
 
-          {/* Desiccant upgrade callout */}
-          {recommendation.desiccantUpgrade && (
+          {/* Refrigerated alternative note when desiccant is primary */}
+          {recommendation.refrigeratedAlternative && (
             <div
               className="mt-3 px-3 py-2 rounded text-[11px] leading-relaxed"
               style={{
-                background: 'var(--cockpit-amber-50)',
-                border: '1px solid var(--cockpit-amber-100)',
-                color: 'var(--cockpit-amber-900)',
+                background: 'var(--cockpit-live-bg)',
+                border: '1px solid var(--cockpit-live-border)',
+                color: 'var(--cockpit-text-secondary)',
               }}
             >
-              <span className="font-semibold">UPSELL:</span>{' '}
-              {recommendation.desiccantUpgrade.model} desiccant dryer ({formatPrice(recommendation.desiccantUpgrade.price)})
-              — molecular sieve media, {recommendation.desiccantUpgrade.dewpoint}°F dewpoint.
-              Billet aluminum, wall mount, 1/3 size of conventional. For AS9100/pharma.
+              <span className="font-semibold">ALT:</span>{' '}
+              {recommendation.refrigeratedAlternative.model} refrigerated dryer ({formatPrice(recommendation.refrigeratedAlternative.price)})
+              — 38°F dewpoint, lower cost option if air quality requirements soften.
             </div>
           )}
 

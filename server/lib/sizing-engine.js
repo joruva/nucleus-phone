@@ -53,6 +53,29 @@ const FILTER_SIZES = {
   ],
 };
 
+// Joruva oil-water separators — EPA-compliant condensate disposal.
+// Every oil-lubricated compressor system needs one. Sized by total system SCFM.
+// Prices from WooCommerce (live). Service kits sold separately (subscription saves 10%).
+// Reactis additive included on 150 SCFM+ units.
+const OWS_CATALOG = [
+  { model: 'OWS75',   maxCfm: 75,   price: 234,   serviceKit: 'SERVKIT75',   salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS150',  maxCfm: 150,  price: 1092,  serviceKit: 'SERVKIT150',  salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS450',  maxCfm: 450,  price: 1570,  serviceKit: 'SERVKIT450',  salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS1000', maxCfm: 1000, price: 2436,  serviceKit: 'SERVKIT1000', salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS2000', maxCfm: 2000, price: 5360,  serviceKit: 'SERVKIT1000', salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS3000', maxCfm: 3000, price: 7790,  serviceKit: 'SERVKIT3500', salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS3500', maxCfm: 3500, price: 14800, serviceKit: 'SERVKIT3500', salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+  { model: 'OWS7000', maxCfm: 7000, price: 20940, serviceKit: 'SERVKIT7000', salesChannel: 'ecommerce', pricingStatus: 'confirmed' },
+];
+
+function selectOws(cfm) {
+  return OWS_CATALOG.find(o => o.maxCfm >= cfm) || OWS_CATALOG[OWS_CATALOG.length - 1];
+}
+
+// Air quality classes that REQUIRE desiccant as primary dryer (not optional upgrade).
+// Refrigerated dryers only achieve ~38°F dewpoint — insufficient for these applications.
+const DESICCANT_REQUIRED = new Set(['ISO_8573_1', 'paint_grade']);
+
 // Backward compat — legacy code references FILTER_CATALOG (the 130 CFM tier).
 const FILTER_CATALOG = {
   particulate: FILTER_SIZES.particulate.find(f => f.model === 'JPF-130'),
@@ -149,6 +172,9 @@ function recommendSystem(demand) {
   // In parallel configs each compressor has its own filter train.
   const filters = [selectFilter('particulate', compressor.cfm)];
 
+  // Oil/water separator — environmental compliance, every system needs one.
+  const ows = selectOws(dryerCfm);
+
   const notes = [];
 
   // Flag undersized dryer in parallel configs
@@ -165,23 +191,34 @@ function recommendSystem(demand) {
     parallelConfig,
     dryer: { ...dryer },
     filters: filters.map(f => ({ ...f })),
+    ows: { ...ows },
     demand: { ...demand },
     notes,
     // salesChannel and pricingStatus are set by deriveSalesChannel() after
-    // addQualityFilters() has had a chance to add desiccant upgrades.
+    // addQualityFilters() has had a chance to swap dryer type.
     salesChannel: null,
     pricingStatus: null,
   };
 }
 
 /**
- * Mutates recommendation in-place: adds coalescing filter when air quality
- * class requires it (AS9100/ISO_8573_1, paint grade). No return value.
+ * Mutates recommendation in-place: adds coalescing filter and handles
+ * dryer type selection based on air quality class.
+ *
+ * When air quality REQUIRES desiccant (ISO_8573_1, paint_grade):
+ *   - Desiccant becomes the PRIMARY dryer (recommendation.dryer)
+ *   - Refrigerated is stashed as recommendation.refrigeratedAlternative
+ *   - recommendation.dryerType = 'desiccant'
+ *
+ * When air quality is general/unspecified:
+ *   - Refrigerated stays as primary dryer
+ *   - Desiccant offered as optional upgrade (recommendation.desiccantUpgrade)
+ *   - recommendation.dryerType = 'refrigerated'
  */
 function addQualityFilters(recommendation, airQualityClass) {
   if (!recommendation || !airQualityClass) return;
 
-  const needsCoalescing = airQualityClass === 'ISO_8573_1' || airQualityClass === 'paint_grade';
+  const needsCoalescing = DESICCANT_REQUIRED.has(airQualityClass);
   if (needsCoalescing) {
     const hasCoalescing = recommendation.filters.some(f => f.micron <= 0.01);
     if (!hasCoalescing) {
@@ -190,22 +227,30 @@ function addQualityFilters(recommendation, airQualityClass) {
       recommendation.notes.push('Coalescing filter added for air quality requirements');
     }
 
-    // Desiccant upgrade sized to single compressor CFM (each compressor has
+    // Desiccant sized to single compressor CFM (each compressor has
     // its own air treatment loop in parallel configs).
     const desiccant = DESICCANT_CATALOG.find(d => d.cfm >= (recommendation.compressor?.cfm || 40))
       || DESICCANT_CATALOG[DESICCANT_CATALOG.length - 1];
-    recommendation.desiccantUpgrade = { ...desiccant };
+
+    // Swap: desiccant becomes primary, refrigerated becomes the alternative
+    recommendation.refrigeratedAlternative = { ...recommendation.dryer };
+    recommendation.dryer = { ...desiccant };
+    recommendation.dryerType = 'desiccant';
+
     const desiccantCount = recommendation.parallelConfig ? recommendation.parallelConfig.unitCount : 1;
     const desiccantQty = desiccantCount > 1 ? `${desiccantCount}x ` : '';
     recommendation.notes.push(
-      `Consider desiccant dryer upgrade (${desiccantQty}${desiccant.model}, ${desiccant.price ? '$' + desiccant.price.toLocaleString() + (desiccantCount > 1 ? ' each' : '') : 'quote required'}) — molecular sieve media achieves ${desiccant.dewpoint}°F dewpoint vs 38°F refrigerated. Required for AS9100/pharma.`
+      `Desiccant dryer selected (${desiccantQty}${desiccant.model}, ${desiccant.price ? '$' + desiccant.price.toLocaleString() + (desiccantCount > 1 ? ' each' : '') : 'quote required'}) — molecular sieve media achieves ${desiccant.dewpoint}°F dewpoint. Required for ${airQualityClass === 'ISO_8573_1' ? 'AS9100/pharma' : 'paint/finishing'} applications.`
     );
+  } else {
+    // General air quality — refrigerated stays primary
+    recommendation.dryerType = 'refrigerated';
   }
 }
 
 /**
  * Derive top-level salesChannel and pricingStatus from all components.
- * Must be called AFTER addQualityFilters() so desiccant upgrades are included.
+ * Must be called AFTER addQualityFilters() so dryer type swap and OWS are included.
  *
  * salesChannel = 'direct' if ANY component is direct.
  * pricingStatus = 'quote_required' if ANY component is quote_required.
@@ -217,10 +262,8 @@ function deriveSalesChannel(recommendation) {
     recommendation.compressor,
     recommendation.dryer,
     ...recommendation.filters,
-  ];
-  if (recommendation.desiccantUpgrade) {
-    components.push(recommendation.desiccantUpgrade);
-  }
+    recommendation.ows,
+  ].filter(Boolean);
   if (recommendation.parallelConfig) {
     // Parallel is always direct
     recommendation.salesChannel = 'direct';
@@ -239,10 +282,13 @@ module.exports = {
   addQualityFilters,
   deriveSalesChannel,
   selectFilter,
+  selectOws,
   SAFETY_FACTOR,
   COMPRESSOR_CATALOG,
   DRYER_CATALOG,
   DESICCANT_CATALOG,
+  OWS_CATALOG,
+  DESICCANT_REQUIRED,
   FILTER_CATALOG,
   FILTER_SIZES,
 };

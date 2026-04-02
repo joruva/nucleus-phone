@@ -11,6 +11,7 @@ const { lookupEquipment } = require('./equipment-lookup');
 const { calculateDemand, recommendSystem, addQualityFilters, deriveSalesChannel } = require('./sizing-engine');
 const { logSighting } = require('./equipment-db');
 const { broadcast, getCallEquipment } = require('./live-analysis');
+const { addVariant } = require('./equipment-curator');
 
 /**
  * Process a transcript chunk through the equipment detection pipeline.
@@ -41,6 +42,16 @@ async function processEquipmentChunk(callId, callType, dbCallId, text) {
         air_quality_class: result.air_quality_class,
         confidence: result.confidence,
       } : null;
+
+      // Learn variant: if lookup matched but extracted model differs from canonical,
+      // persist the alias so future lookups hit Step 2 (variant match) instead of Step 3 (fuzzy).
+      if (result) {
+        const canonical = result.model.toLowerCase();
+        const newVariants = new Set();
+        if (entity.model && entity.model.toLowerCase() !== canonical) newVariants.add(entity.model);
+        if (entity.raw_mention && entity.raw_mention.toLowerCase() !== canonical) newVariants.add(entity.raw_mention);
+        for (const v of newVariants) addVariant(result.id, v).catch(() => {}); // fire-and-forget; addVariant logs internally
+      }
 
       await logSighting({
         manufacturer: entity.manufacturer,

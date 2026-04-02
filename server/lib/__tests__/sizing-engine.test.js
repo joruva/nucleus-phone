@@ -4,10 +4,13 @@ const {
   addQualityFilters,
   deriveSalesChannel,
   selectFilter,
+  selectOws,
   SAFETY_FACTOR,
   COMPRESSOR_CATALOG,
   DRYER_CATALOG,
   DESICCANT_CATALOG,
+  OWS_CATALOG,
+  DESICCANT_REQUIRED,
   FILTER_SIZES,
 } = require('../sizing-engine');
 
@@ -97,6 +100,7 @@ describe('recommendSystem', () => {
     expect(rec.compressor.model).toBe('JRS-5E');
     expect(rec.dryer).toBeTruthy();
     expect(rec.filters.length).toBeGreaterThan(0);
+    expect(rec.ows).toBeTruthy();
   });
 
   it('recommends JRS-7.5E for moderate low demand', () => {
@@ -190,11 +194,38 @@ describe('addQualityFilters', () => {
     expect(rec.notes.join(' ')).toContain('Coalescing filter');
   });
 
-  it('adds coalescing filter for paint_grade', () => {
+  it('swaps desiccant as primary dryer for ISO_8573_1', () => {
+    const demand = calculateDemand([{ cfm_typical: 10, count: 1 }]);
+    const rec = recommendSystem(demand);
+    const originalDryer = rec.dryer.model;
+    addQualityFilters(rec, 'ISO_8573_1');
+    // Desiccant is now the primary dryer
+    expect(rec.dryer.model).toMatch(/^JDD-/);
+    expect(rec.dryerType).toBe('desiccant');
+    // Refrigerated is stashed as alternative
+    expect(rec.refrigeratedAlternative).toBeTruthy();
+    expect(rec.refrigeratedAlternative.model).toBe(originalDryer);
+    expect(rec.notes.join(' ')).toContain('Desiccant dryer selected');
+  });
+
+  it('swaps desiccant as primary dryer for paint_grade', () => {
     const demand = calculateDemand([{ cfm_typical: 10, count: 1 }]);
     const rec = recommendSystem(demand);
     addQualityFilters(rec, 'paint_grade');
+    expect(rec.dryer.model).toMatch(/^JDD-/);
+    expect(rec.dryerType).toBe('desiccant');
+    expect(rec.refrigeratedAlternative).toBeTruthy();
     expect(rec.filters.some(f => f.micron <= 0.01)).toBe(true);
+  });
+
+  it('keeps refrigerated as primary for general air quality', () => {
+    const demand = calculateDemand([{ cfm_typical: 10, count: 1 }]);
+    const rec = recommendSystem(demand);
+    addQualityFilters(rec, 'general');
+    expect(rec.dryer.model).toMatch(/^JRD-/);
+    expect(rec.dryerType).toBe('refrigerated');
+    expect(rec.refrigeratedAlternative).toBeUndefined();
+    expect(rec.filters.some(f => f.micron <= 0.01)).toBe(false);
   });
 
   it('does not duplicate coalescing filter', () => {
@@ -242,23 +273,33 @@ describe('deriveSalesChannel', () => {
     expect(rec.salesChannel).toBe('direct');
   });
 
-  it('includes desiccant upgrade in worst-case derivation', () => {
-    // Small system (ecommerce compressor) but with ISO air quality → desiccant
+  it('includes desiccant dryer in worst-case derivation', () => {
+    // Small system (ecommerce compressor) but with ISO air quality → desiccant as primary
     const demand = calculateDemand([{ cfm_typical: 8, duty_cycle_pct: 60, count: 1 }]);
     const rec = recommendSystem(demand);
     addQualityFilters(rec, 'ISO_8573_1');
     deriveSalesChannel(rec);
-    // JRS-5E is ecommerce, JDD-40 is ecommerce, so still ecommerce
+    // JRS-5E is ecommerce, JDD-40 is ecommerce, JOWS-50 is ecommerce → still ecommerce
     expect(rec.salesChannel).toBe('ecommerce');
   });
 
-  it('marks direct when desiccant upgrade is direct (large system)', () => {
+  it('marks direct when desiccant dryer is direct (large system)', () => {
     // Large system where desiccant SKU is a placeholder (>80 CFM = JDD-200, direct)
     const demand = calculateDemand([{ cfm_typical: 12, duty_cycle_pct: 70, count: 15 }]);
     const rec = recommendSystem(demand);
     addQualityFilters(rec, 'ISO_8573_1');
     deriveSalesChannel(rec);
     expect(rec.salesChannel).toBe('direct');
+  });
+
+  it('includes OWS in sales channel derivation', () => {
+    const demand = calculateDemand([{ cfm_typical: 10, count: 1 }]);
+    const rec = recommendSystem(demand);
+    deriveSalesChannel(rec);
+    // OWS should be included — OWS75 is ecommerce
+    expect(rec.ows).toBeTruthy();
+    expect(rec.ows.model).toBe('OWS75');
+    expect(rec.ows.salesChannel).toBe('ecommerce');
   });
 });
 
@@ -575,5 +616,132 @@ describe('desiccant catalog expansion', () => {
       expect(d.salesChannel).toBe('direct');
       expect(d.pricingStatus).toBe('quote_required');
     }
+  });
+});
+
+describe('OWS_CATALOG', () => {
+  it('is sorted by maxCfm ascending', () => {
+    for (let i = 1; i < OWS_CATALOG.length; i++) {
+      expect(OWS_CATALOG[i].maxCfm).toBeGreaterThan(OWS_CATALOG[i - 1].maxCfm);
+    }
+  });
+
+  it('has no duplicate models', () => {
+    const models = OWS_CATALOG.map(o => o.model);
+    expect(new Set(models).size).toBe(models.length);
+  });
+
+  it('matches real Joruva SKUs (OWS75 through OWS7000)', () => {
+    const models = OWS_CATALOG.map(o => o.model);
+    expect(models).toContain('OWS75');
+    expect(models).toContain('OWS150');
+    expect(models).toContain('OWS450');
+    expect(models).toContain('OWS1000');
+    expect(models).toContain('OWS7000');
+    expect(OWS_CATALOG.length).toBe(8);
+  });
+
+  it('every entry has required fields', () => {
+    for (const entry of OWS_CATALOG) {
+      expect(entry).toHaveProperty('model');
+      expect(entry).toHaveProperty('maxCfm');
+      expect(entry).toHaveProperty('price');
+      expect(entry).toHaveProperty('serviceKit');
+      expect(entry.price).toBeGreaterThan(0);
+      expect(['ecommerce', 'direct']).toContain(entry.salesChannel);
+      expect(['confirmed', 'quote_required']).toContain(entry.pricingStatus);
+    }
+  });
+
+  it('all entries have confirmed pricing (all ecommerce)', () => {
+    for (const o of OWS_CATALOG) {
+      expect(o.salesChannel).toBe('ecommerce');
+      expect(o.pricingStatus).toBe('confirmed');
+    }
+  });
+});
+
+describe('selectOws', () => {
+  it('picks smallest OWS that covers demand', () => {
+    expect(selectOws(20).model).toBe('OWS75');
+    expect(selectOws(75).model).toBe('OWS75');
+    expect(selectOws(76).model).toBe('OWS150');
+    expect(selectOws(150).model).toBe('OWS150');
+    expect(selectOws(200).model).toBe('OWS450');
+  });
+
+  it('picks largest OWS when demand exceeds all sizes', () => {
+    expect(selectOws(8000).model).toBe('OWS7000');
+  });
+
+  it('sizes OWS75 at $234 for small systems', () => {
+    const ows = selectOws(30);
+    expect(ows.model).toBe('OWS75');
+    expect(ows.price).toBe(234);
+  });
+});
+
+describe('DESICCANT_REQUIRED', () => {
+  it('includes ISO_8573_1 and paint_grade', () => {
+    expect(DESICCANT_REQUIRED.has('ISO_8573_1')).toBe(true);
+    expect(DESICCANT_REQUIRED.has('paint_grade')).toBe(true);
+  });
+
+  it('does not include general', () => {
+    expect(DESICCANT_REQUIRED.has('general')).toBe(false);
+  });
+});
+
+describe('application-aware dryer selection', () => {
+  function sizeWithAirQuality(machines, airQualityClass) {
+    const demand = calculateDemand(machines);
+    const rec = recommendSystem(demand);
+    if (rec) {
+      addQualityFilters(rec, airQualityClass);
+      deriveSalesChannel(rec);
+    }
+    return { demand, rec };
+  }
+
+  it('paint booth → desiccant primary, refrigerated alternative', () => {
+    const { rec } = sizeWithAirQuality(
+      [{ cfm_typical: 20, duty_cycle_pct: 80, count: 2 }],
+      'paint_grade'
+    );
+    expect(rec.dryerType).toBe('desiccant');
+    expect(rec.dryer.dewpoint).toBe(-60);
+    expect(rec.refrigeratedAlternative.model).toMatch(/^JRD-/);
+  });
+
+  it('aerospace shop (ISO) → desiccant primary', () => {
+    const { rec } = sizeWithAirQuality(
+      [{ cfm_typical: 12, duty_cycle_pct: 70, count: 5 }],
+      'ISO_8573_1'
+    );
+    expect(rec.dryerType).toBe('desiccant');
+    expect(rec.dryer.model).toMatch(/^JDD-/);
+  });
+
+  it('general CNC shop → refrigerated primary, no alternative field', () => {
+    const { rec } = sizeWithAirQuality(
+      [{ cfm_typical: 12, duty_cycle_pct: 70, count: 5 }],
+      'general'
+    );
+    expect(rec.dryerType).toBe('refrigerated');
+    expect(rec.dryer.model).toMatch(/^JRD-/);
+    expect(rec.refrigeratedAlternative).toBeUndefined();
+  });
+
+  it('OWS always present regardless of air quality class', () => {
+    const { rec: general } = sizeWithAirQuality(
+      [{ cfm_typical: 10, count: 1 }],
+      'general'
+    );
+    const { rec: iso } = sizeWithAirQuality(
+      [{ cfm_typical: 10, count: 1 }],
+      'ISO_8573_1'
+    );
+    expect(general.ows).toBeTruthy();
+    expect(iso.ows).toBeTruthy();
   });
 });

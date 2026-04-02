@@ -42,10 +42,10 @@ const CNC_MILLS = [
   { manufacturer: 'Mazak', model: 'VCN-530C', variants: ['VCN530C', 'VCN 530C'], subcategory: 'vertical_mill', cfm_min: 12, cfm_max: 22, cfm_typical: 15, psi: 90, duty: 70, hp: 25, axes: 3, voltage: '220V/3ph', quality: 'general' },
 
   // DMG Mori
-  { manufacturer: 'DMG Mori', model: 'NLX 2500', variants: ['NLX2500', 'NLX 2500/700'], subcategory: 'turning_center', cfm_min: 10, cfm_max: 20, cfm_typical: 14, psi: 90, duty: 65, hp: 25, axes: 2, voltage: '480V/3ph', quality: 'general', category: 'cnc_lathe' },
-  { manufacturer: 'DMG Mori', model: 'CMX 600V', variants: ['CMX600V', 'CMX 600'], subcategory: 'vertical_mill', cfm_min: 12, cfm_max: 22, cfm_typical: 15, psi: 90, duty: 70, hp: 18, axes: 3, voltage: '480V/3ph', quality: 'general' },
-  { manufacturer: 'DMG Mori', model: 'CMX 800V', variants: ['CMX800V', 'CMX 800'], subcategory: 'vertical_mill', cfm_min: 15, cfm_max: 25, cfm_typical: 18, psi: 90, duty: 70, hp: 25, axes: 3, voltage: '480V/3ph', quality: 'general' },
-  { manufacturer: 'DMG Mori', model: 'DMU 50', variants: ['DMU50'], subcategory: 'vertical_mill', cfm_min: 15, cfm_max: 28, cfm_typical: 18, psi: 90, duty: 75, hp: 25, axes: 5, voltage: '480V/3ph', quality: 'general' },
+  { manufacturer: 'DMG Mori', model: 'NLX 2500', variants: ['NLX2500', 'NLX 2500/700', 'Mori Seiki NLX 2500', 'Mori Seiki NLX2500'], subcategory: 'turning_center', cfm_min: 10, cfm_max: 20, cfm_typical: 14, psi: 90, duty: 65, hp: 25, axes: 2, voltage: '480V/3ph', quality: 'general', category: 'cnc_lathe' },
+  { manufacturer: 'DMG Mori', model: 'CMX 600V', variants: ['CMX600V', 'CMX 600', 'Mori Seiki CMX 600V'], subcategory: 'vertical_mill', cfm_min: 12, cfm_max: 22, cfm_typical: 15, psi: 90, duty: 70, hp: 18, axes: 3, voltage: '480V/3ph', quality: 'general' },
+  { manufacturer: 'DMG Mori', model: 'CMX 800V', variants: ['CMX800V', 'CMX 800', 'Mori Seiki CMX 800V'], subcategory: 'vertical_mill', cfm_min: 15, cfm_max: 25, cfm_typical: 18, psi: 90, duty: 70, hp: 25, axes: 3, voltage: '480V/3ph', quality: 'general' },
+  { manufacturer: 'DMG Mori', model: 'DMU 50', variants: ['DMU50', 'Mori Seiki DMU 50'], subcategory: 'vertical_mill', cfm_min: 15, cfm_max: 28, cfm_typical: 18, psi: 90, duty: 75, hp: 25, axes: 5, voltage: '480V/3ph', quality: 'general' },
 
   // Okuma
   { manufacturer: 'Okuma', model: 'GENOS L200', variants: ['GENOS L 200', 'L200'], subcategory: 'turning_center', cfm_min: 8, cfm_max: 15, cfm_typical: 10, psi: 90, duty: 60, hp: 15, axes: 2, voltage: '220V/3ph', quality: 'general', category: 'cnc_lathe' },
@@ -79,6 +79,29 @@ const CNC_MILLS = [
 
   // Bridgeport (older shops still running these)
   { manufacturer: 'Bridgeport', model: 'Series I', variants: ['Series 1', 'Bridgeport Mill'], subcategory: 'vertical_mill', cfm_min: 2, cfm_max: 5, cfm_typical: 3, psi: 90, duty: 40, hp: 2, axes: 3, voltage: '208V/1ph', quality: 'general' },
+
+  // Haas HMCs — pallet changers are big air consumers
+  { manufacturer: 'Haas', model: 'EC-400', variants: ['EC400', 'EC 400'], subcategory: 'horizontal_mill', cfm_min: 15, cfm_max: 28, cfm_typical: 20, psi: 90, duty: 75, hp: 20, axes: 4, voltage: '208V/3ph', quality: 'general' },
+  { manufacturer: 'Haas', model: 'EC-500', variants: ['EC500', 'EC 500'], subcategory: 'horizontal_mill', cfm_min: 18, cfm_max: 32, cfm_typical: 22, psi: 90, duty: 75, hp: 25, axes: 4, voltage: '208V/3ph', quality: 'general' },
+
+  // Haas toolroom lathes — very common in small shops
+  { manufacturer: 'Haas', model: 'TL-1', variants: ['TL1', 'TL 1'], subcategory: 'turning_center', cfm_min: 4, cfm_max: 10, cfm_typical: 6, psi: 90, duty: 45, hp: 7.5, axes: 2, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
+  { manufacturer: 'Haas', model: 'TL-2', variants: ['TL2', 'TL 2'], subcategory: 'turning_center', cfm_min: 5, cfm_max: 12, cfm_typical: 8, psi: 90, duty: 50, hp: 10, axes: 2, voltage: '208V/3ph', quality: 'general', category: 'cnc_lathe' },
+
+  // Brother Speedio — very popular in production
+  { manufacturer: 'Brother', model: 'Speedio S500X2', variants: ['S500X2', 'Speedio S500', 'Brother S500'], subcategory: 'vertical_mill', cfm_min: 8, cfm_max: 15, cfm_typical: 10, psi: 90, duty: 70, hp: 7, axes: 3, voltage: '200V/3ph', quality: 'general' },
+  { manufacturer: 'Brother', model: 'Speedio S700X2', variants: ['S700X2', 'Speedio S700', 'Brother S700'], subcategory: 'vertical_mill', cfm_min: 10, cfm_max: 18, cfm_typical: 12, psi: 90, duty: 70, hp: 11, axes: 3, voltage: '200V/3ph', quality: 'general' },
+  { manufacturer: 'Brother', model: 'Speedio R650X2', variants: ['R650X2', 'Speedio R650', 'Brother R650'], subcategory: 'vertical_mill', cfm_min: 10, cfm_max: 18, cfm_typical: 12, psi: 90, duty: 75, hp: 11, axes: 5, voltage: '200V/3ph', quality: 'general' },
+
+  // Mazak 5-axis
+  { manufacturer: 'Mazak', model: 'VARIAXIS i-300', variants: ['VARIAXIS i300', 'Variaxis 300'], subcategory: 'vertical_mill', cfm_min: 15, cfm_max: 28, cfm_typical: 18, psi: 90, duty: 75, hp: 25, axes: 5, voltage: '220V/3ph', quality: 'general' },
+
+  // Doosan HMC
+  { manufacturer: 'Doosan', model: 'NHP 5000', variants: ['NHP5000', 'NHP 5000'], subcategory: 'horizontal_mill', cfm_min: 18, cfm_max: 30, cfm_typical: 22, psi: 90, duty: 75, hp: 30, axes: 4, voltage: '220V/3ph', quality: 'general' },
+
+  // Makino — high-end production
+  { manufacturer: 'Makino', model: 'PS95', variants: ['PS 95', 'PS95'], subcategory: 'vertical_mill', cfm_min: 12, cfm_max: 22, cfm_typical: 15, psi: 90, duty: 70, hp: 20, axes: 3, voltage: '480V/3ph', quality: 'general' },
+  { manufacturer: 'Makino', model: 'a51nx', variants: ['a51', 'a51 nx', 'Makino a51'], subcategory: 'horizontal_mill', cfm_min: 18, cfm_max: 30, cfm_typical: 22, psi: 90, duty: 80, hp: 30, axes: 4, voltage: '480V/3ph', quality: 'general' },
 ];
 
 // ── Packaging Equipment ─────────────────────────────────────────────
@@ -209,10 +232,12 @@ const DETAILS = {
     typical_applications: ['surface preparation', 'rust removal', 'coating removal'],
     industries: ['structural steel', 'marine', 'industrial maintenance'],
     air_usage_notes: 'CFM demand depends on nozzle size: #4 nozzle = 80 CFM, #6 = 140 CFM, #8 = 230 CFM. Most shops undersize by 50%.',
-    common_air_problems: ['compressor cannot keep up — pressure drops below effective blasting range', 'moisture causes media clumping'],
+    common_air_problems: ['compressor cannot keep up — pressure drops below effective blasting range', 'moisture causes media clumping and nozzle clogging'],
+    recommended_air_quality: 'Dry air mandatory — moisture causes media clumping, nozzle blockage, and flash rust on blasted surfaces',
     recommended_compressor: 'JRS-25E',
-    system_notes: 'Single compressor often insufficient for #6+ nozzles. May need dedicated unit or parallel setup.',
-    key_selling_points: ['Biggest air ROI in the shop — proper sizing cuts blast time in half', 'Most sandblasters are running 30-40% below optimal pressure'],
+    recommended_dryer: 'JRD-200',
+    system_notes: 'Single compressor often insufficient for #6+ nozzles. May need dedicated unit or parallel setup. Always pair with dryer — wet blasting is the #1 complaint.',
+    key_selling_points: ['Biggest air ROI in the shop — proper sizing cuts blast time in half', 'Most sandblasters are running 30-40% below optimal pressure', 'Dry air eliminates flash rust rework'],
   },
   'ShopBot:PRSalpha': {
     description: 'Full-size CNC router for cabinet/sign shops. Intermittent air for tool change and hold-down clamps.',

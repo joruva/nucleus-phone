@@ -272,6 +272,16 @@ async function initSchema() {
     `);
     console.log('quote_requests table ready');
 
+    // ── Curation log ──────────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS equipment_curation_log (
+        id SERIAL PRIMARY KEY,
+        run_summary JSONB NOT NULL,
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+    console.log('equipment_curation_log table ready');
+
   } finally {
     client.release();
   }

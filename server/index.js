@@ -9,6 +9,7 @@ const { errorHandler } = require('./middleware/error');
 const { apiKeyAuth } = require('./middleware/auth');
 const { startSweep } = require('./lib/stale-sweep');
 const { attachWebSocket } = require('./lib/live-analysis');
+const { startScheduler: startCurator } = require('./lib/equipment-curator');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -50,6 +51,7 @@ app.use('/api/scoreboard', require('./routes/scoreboard'));
 app.use('/api/sim', require('./routes/sim'));
 app.use('/api/transcription', require('./routes/transcription'));
 app.use('/api/equipment', apiKeyAuth, require('./routes/equipment'));
+app.use('/api/curation', apiKeyAuth, require('./routes/curation'));
 const { sessionAuth } = require('./middleware/auth');
 app.use('/api/quote-request', sessionAuth, require('./routes/quote-request'));
 app.use('/api/signals', require('./routes/signals'));
@@ -66,6 +68,7 @@ app.use(errorHandler);
 async function start() {
   await initSchema();
   startSweep();
+  startCurator();
   const httpServer = app.listen(PORT, () => {
     console.log(`nucleus-phone listening on :${PORT}`);
   });
