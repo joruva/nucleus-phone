@@ -152,6 +152,50 @@ describe('insertEquipment', () => {
     expect(mockClient.release).toHaveBeenCalled();
   });
 
+  it('passes all 13 equipment_details columns including key_selling_points and common_objections', async () => {
+    mockClient.query
+      .mockResolvedValueOnce(undefined) // BEGIN
+      .mockResolvedValueOnce({ rows: [{ id: 99 }] }) // INSERT catalog
+      .mockResolvedValueOnce(undefined) // INSERT details
+      .mockResolvedValueOnce(undefined); // COMMIT
+
+    const allDetails = {
+      description: '3-axis vertical mill',
+      typical_applications: 'General machining',
+      industries: 'Aerospace, Automotive',
+      air_usage_notes: '12 CFM typical',
+      common_air_problems: 'Moisture in tool holders',
+      recommended_air_quality: 'ISO 8573-1 Class 1.4.1',
+      recommended_compressor: 'JRS-15E',
+      recommended_dryer: 'RD-15',
+      recommended_filters: 'F-series inline',
+      system_notes: 'Size for growth',
+      key_selling_points: ['Moisture is the #1 issue', 'Size for growth'],
+      common_objections: ['Already have a piston compressor', 'Getting quotes from Kaeser'],
+    };
+
+    const result = await insertEquipment(
+      { manufacturer: 'Haas', model: 'VF-2', category: 'cnc_mill', source: 'web_search' },
+      allDetails
+    );
+
+    expect(result).toEqual({ id: 99 });
+    // Details INSERT is the 3rd query (index 2)
+    const detailsCall = mockClient.query.mock.calls[2];
+    const sql = detailsCall[0];
+    const params = detailsCall[1];
+
+    // SQL includes all 13 columns
+    expect(sql).toContain('key_selling_points');
+    expect(sql).toContain('common_objections');
+
+    // 13 params: equipment_id + 12 detail fields
+    expect(params).toHaveLength(13);
+    expect(params[0]).toBe(99); // equipment_id
+    expect(params[11]).toEqual(['Moisture is the #1 issue', 'Size for growth']);
+    expect(params[12]).toEqual(['Already have a piston compressor', 'Getting quotes from Kaeser']);
+  });
+
   it('rolls back on error', async () => {
     mockClient.query
       .mockResolvedValueOnce(undefined) // BEGIN

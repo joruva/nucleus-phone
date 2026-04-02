@@ -158,8 +158,8 @@ async function insertEquipment(catalogData, detailsData) {
           (equipment_id, description, typical_applications, industries,
            air_usage_notes, common_air_problems, recommended_air_quality,
            recommended_compressor, recommended_dryer, recommended_filters,
-           system_notes)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+           system_notes, key_selling_points, common_objections)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT (equipment_id) DO UPDATE SET
            description = COALESCE(EXCLUDED.description, equipment_details.description),
            typical_applications = COALESCE(EXCLUDED.typical_applications, equipment_details.typical_applications),
@@ -170,14 +170,17 @@ async function insertEquipment(catalogData, detailsData) {
            recommended_compressor = COALESCE(EXCLUDED.recommended_compressor, equipment_details.recommended_compressor),
            recommended_dryer = COALESCE(EXCLUDED.recommended_dryer, equipment_details.recommended_dryer),
            recommended_filters = COALESCE(EXCLUDED.recommended_filters, equipment_details.recommended_filters),
-           system_notes = COALESCE(EXCLUDED.system_notes, equipment_details.system_notes)`,
+           system_notes = COALESCE(EXCLUDED.system_notes, equipment_details.system_notes),
+           key_selling_points = COALESCE(EXCLUDED.key_selling_points, equipment_details.key_selling_points),
+           common_objections = COALESCE(EXCLUDED.common_objections, equipment_details.common_objections)`,
         [
           catalog.id, detailsData.description ?? null,
           detailsData.typical_applications ?? null, detailsData.industries ?? null,
           detailsData.air_usage_notes ?? null, detailsData.common_air_problems ?? null,
           detailsData.recommended_air_quality ?? null, detailsData.recommended_compressor ?? null,
           detailsData.recommended_dryer ?? null, detailsData.recommended_filters ?? null,
-          detailsData.system_notes ?? null,
+          detailsData.system_notes ?? null, detailsData.key_selling_points ?? null,
+          detailsData.common_objections ?? null,
         ]
       );
     }
