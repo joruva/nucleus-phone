@@ -16,6 +16,7 @@ import useCallState from './hooks/useCallState';
 export default function App() {
   const [user, setUser] = useState(null); // { identity, role, email }
   const [loading, setLoading] = useState(true);
+  const [emailReady, setEmailReady] = useState(false);
 
   // Check session on mount
   useEffect(() => {
@@ -27,6 +28,15 @@ export default function App() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  // Check if rep has MSAL tokens for email sending
+  useEffect(() => {
+    if (!user) return;
+    fetch('/api/auth/email-ready', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data) setEmailReady(data.ready); })
+      .catch(() => {});
+  }, [user]);
 
   const identity = user?.identity || '';
   const role = user?.role || 'caller';
@@ -68,7 +78,7 @@ export default function App() {
       />
 
       {/* Everything else renders inside Shell layout route */}
-      <Route element={<Shell identity={identity} role={role} onLogout={handleLogout} deviceStatus={twilioHook.status} />}>
+      <Route element={<Shell identity={identity} role={role} onLogout={handleLogout} deviceStatus={twilioHook.status} emailReady={emailReady} />}>
         <Route
           path="/"
           element={
@@ -95,6 +105,7 @@ export default function App() {
             <CallComplete
               callState={callState}
               identity={identity}
+              emailReady={emailReady}
             />
           }
         />

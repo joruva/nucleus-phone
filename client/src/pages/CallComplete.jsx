@@ -21,7 +21,7 @@ const QUALIFICATIONS = [
 
 const PRODUCTS = ['JRS-7.5E', 'JRS-10E', 'JRS-15E', 'JRS-20E', 'Other'];
 
-export default function CallComplete({ callState, identity }) {
+export default function CallComplete({ callState, identity, emailReady }) {
   const navigate = useNavigate();
   const { callData, elapsed, clearCallData } = callState;
 
@@ -35,6 +35,8 @@ export default function CallComplete({ callState, identity }) {
     return `Called ${name} at ${props.company || 'Unknown'}. Duration: ${formatDuration(elapsed)}.`;
   });
   const [saving, setSaving] = useState(false);
+  const [sendFollowUp, setSendFollowUp] = useState(true);
+  const [leadEmail, setLeadEmail] = useState(() => callData?.contact?.properties?.email || '');
 
   useEffect(() => {
     if (!callData) navigate('/');
@@ -56,11 +58,14 @@ export default function CallComplete({ callState, identity }) {
     setSaving(true);
 
     try {
+      const wantsEmail = disposition === 'connected' && qualification && sendFollowUp && emailReady;
       await saveDisposition(callData.callId, {
         disposition,
         qualification: disposition === 'connected' ? qualification : null,
         notes,
         products_discussed: disposition === 'connected' ? products : [],
+        send_follow_up: wantsEmail,
+        lead_email: leadEmail || undefined,
       });
 
       clearCallData();
@@ -137,6 +142,40 @@ export default function CallComplete({ callState, identity }) {
               ))}
             </div>
           </div>
+          {/* Email follow-up toggle */}
+          {qualification && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-jv-muted">Send follow-up email</label>
+                <button
+                  onClick={() => emailReady && setSendFollowUp(!sendFollowUp)}
+                  disabled={!emailReady}
+                  className={`w-10 h-5 rounded-full transition-colors relative ${
+                    sendFollowUp && emailReady ? 'bg-jv-green' : 'bg-jv-border'
+                  } ${!emailReady ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                  title={!emailReady ? 'Re-login required to enable email' : ''}
+                >
+                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
+                    sendFollowUp && emailReady ? 'translate-x-5' : 'translate-x-0.5'
+                  }`} />
+                </button>
+              </div>
+              {sendFollowUp && emailReady && (
+                <input
+                  type="email"
+                  value={leadEmail}
+                  onChange={(e) => setLeadEmail(e.target.value)}
+                  placeholder="Lead email (optional — auto-resolves from HubSpot)"
+                  className="w-full px-4 py-2.5 rounded-lg bg-jv-card border border-jv-border text-white placeholder-jv-muted focus:outline-none focus:border-jv-blue text-sm"
+                />
+              )}
+              {!emailReady && (
+                <p className="text-xs text-jv-muted mt-1">
+                  <a href="/api/auth/login" className="text-jv-blue underline">Re-login</a> to enable email follow-ups
+                </p>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -158,7 +197,9 @@ export default function CallComplete({ callState, identity }) {
           disabled={!disposition || saving}
           className="flex-1 py-3 rounded-sentinel bg-jv-amber text-black font-semibold disabled:opacity-40 transition-colors"
         >
-          {saving ? 'Saving...' : 'Save & Done'}
+          {saving
+            ? (sendFollowUp && emailReady && disposition === 'connected' && qualification ? 'Sending email...' : 'Saving...')
+            : 'Save & Done'}
         </button>
       </div>
     </div>

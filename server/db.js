@@ -282,6 +282,25 @@ async function initSchema() {
     `);
     console.log('equipment_curation_log table ready');
 
+    // ── MSAL token cache for per-rep email sending ───────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS msal_token_cache (
+        partition_key VARCHAR(255) PRIMARY KEY,
+        cache_data TEXT NOT NULL,
+        home_account_id TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+    `);
+
+    // Follow-up email columns on nucleus_phone_calls
+    await client.query(`
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS lead_email TEXT;
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS follow_up_email_sent BOOLEAN DEFAULT FALSE;
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS follow_up_email_error TEXT;
+    `);
+    console.log('msal_token_cache + email columns ready');
+
   } finally {
     client.release();
   }

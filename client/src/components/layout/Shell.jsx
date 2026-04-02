@@ -8,7 +8,7 @@ const STATUS_COLORS = {
   error: 'bg-jv-red',
 };
 
-export default function Shell({ identity, role, onLogout, deviceStatus }) {
+export default function Shell({ identity, role, onLogout, deviceStatus, emailReady }) {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -58,6 +58,13 @@ export default function Shell({ identity, role, onLogout, deviceStatus }) {
           </button>
         </div>
       </header>
+
+      {/* Re-login banner for email sending */}
+      {emailReady === false && (
+        <div className="bg-jv-amber/10 border-b border-jv-amber/30 px-4 py-1.5 text-center text-[11px] text-jv-amber shrink-0">
+          <a href="/api/auth/login" className="underline font-medium">Re-login</a> to enable email follow-ups from your mailbox
+        </div>
+      )}
 
       {/* Content */}
       <main className="flex-1 overflow-y-auto scroll-container">

@@ -2,24 +2,26 @@ const { Router } = require('express');
 const msal = require('@azure/msal-node');
 const jwt = require('jsonwebtoken');
 const { sessionAuth } = require('../middleware/auth');
+const { pool } = require('../db');
+const { encrypt } = require('../lib/crypto');
 
 const router = Router();
 
-// Email → { identity, role } mapping. Only @joruva.com emails allowed.
+// Email → { identity, role, displayName } mapping. Only @joruva.com emails allowed.
 const USER_MAP = {
-  'tom@joruva.com': { identity: 'tom', role: 'admin' },
-  'paul@joruva.com': { identity: 'paul', role: 'admin' },
-  'kate@joruva.com': { identity: 'kate', role: 'caller' },
-  'britt@joruva.com': { identity: 'britt', role: 'caller' },
-  'ryann@joruva.com': { identity: 'ryann', role: 'caller' },
-  'alex@joruva.com': { identity: 'alex', role: 'caller' },
-  'lily@joruva.com': { identity: 'lily', role: 'caller' },
+  'tom@joruva.com': { identity: 'tom', role: 'admin', displayName: 'Tom Russo' },
+  'paul@joruva.com': { identity: 'paul', role: 'admin', displayName: 'Paul Johnson' },
+  'kate@joruva.com': { identity: 'kate', role: 'caller', displayName: 'Kate Russo' },
+  'britt@joruva.com': { identity: 'britt', role: 'caller', displayName: 'Britt' },
+  'ryann@joruva.com': { identity: 'ryann', role: 'caller', displayName: 'Ryann Johnson' },
+  'alex@joruva.com': { identity: 'alex', role: 'caller', displayName: 'Alex' },
+  'lily@joruva.com': { identity: 'lily', role: 'caller', displayName: 'Lily' },
 };
 
 // Valid Twilio identities — used by token endpoint to reject arbitrary strings.
 const VALID_IDENTITIES = new Set(Object.values(USER_MAP).map(u => u.identity));
 
-const SCOPES = ['User.Read', 'openid', 'profile', 'email'];
+const SCOPES = ['User.Read', 'openid', 'profile', 'email', 'Mail.Send', 'offline_access'];
 
 let msalApp;
 
@@ -90,9 +92,25 @@ router.get('/callback', async (req, res) => {
       return res.status(403).send(`No Nucleus Phone account for ${email}`);
     }
 
-    // Create session
+    const homeAccountId = result.account?.homeAccountId || '';
+
+    // Persist MSAL token cache for per-rep email sending (async, non-blocking login)
+    if (process.env.MSAL_ENCRYPTION_KEY) {
+      const cacheJson = getMsalApp().getTokenCache().serialize();
+      const encrypted = encrypt(cacheJson);
+      pool.query(
+        `INSERT INTO msal_token_cache (partition_key, cache_data, home_account_id, updated_at)
+         VALUES ($1, $2, $3, NOW())
+         ON CONFLICT (partition_key)
+         DO UPDATE SET cache_data = $2, home_account_id = $3, updated_at = NOW()`,
+        [email, encrypted, homeAccountId]
+      ).then(() => console.log(`[auth] MSAL cache persisted for ${email}`))
+       .catch(err => console.error(`[auth] Failed to persist MSAL cache for ${email}:`, err.message));
+    }
+
+    // Create session — include homeAccountId for email token refresh
     const token = jwt.sign(
-      { identity: user.identity, role: user.role, email },
+      { identity: user.identity, role: user.role, email, homeAccountId },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -116,10 +134,24 @@ router.get('/me', sessionAuth, (req, res) => {
   res.json(req.user);
 });
 
+// GET /api/auth/email-ready — check if rep has MSAL tokens for email sending
+router.get('/email-ready', sessionAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT 1 FROM msal_token_cache WHERE partition_key = $1',
+      [req.user.email]
+    );
+    res.json({ ready: rows.length > 0 });
+  } catch (err) {
+    console.error('email-ready check failed:', err.message);
+    res.json({ ready: false });
+  }
+});
+
 // POST /api/auth/logout — clear session cookie
 router.post('/logout', (req, res) => {
   res.clearCookie('nucleus_session');
   res.json({ ok: true });
 });
 
-module.exports = Object.assign(router, { VALID_IDENTITIES });
+module.exports = Object.assign(router, { VALID_IDENTITIES, USER_MAP });

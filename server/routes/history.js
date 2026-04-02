@@ -2,9 +2,10 @@ const { Router } = require('express');
 const { apiKeyAuth } = require('../middleware/auth');
 const { pool } = require('../db');
 const { sendSlackAlert, formatCallAlert } = require('../lib/slack');
-const { addNoteToContact } = require('../lib/hubspot');
+const { addNoteToContact, getContact } = require('../lib/hubspot');
 const { formatDuration } = require('../lib/format');
 const { syncInteraction } = require('../lib/interaction-sync');
+const { sendFollowUpEmail } = require('../lib/email-sender');
 
 const router = Router();
 
@@ -12,7 +13,8 @@ const router = Router();
 const CALL_COLUMNS = `id, created_at, conference_name, caller_identity, lead_phone,
   lead_name, lead_company, hubspot_contact_id, direction, status, duration_seconds,
   disposition, qualification, products_discussed, notes, recording_url,
-  recording_duration, fireflies_uploaded`;
+  recording_duration, fireflies_uploaded, lead_email, follow_up_email_sent,
+  follow_up_email_error`;
 
 // GET /api/history — list past calls
 router.get('/', apiKeyAuth, async (req, res) => {
@@ -90,7 +92,7 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
     return res.status(400).json({ error: 'id must be an integer' });
   }
 
-  const { disposition, qualification, notes, products_discussed } = req.body;
+  const { disposition, qualification, notes, products_discussed, send_follow_up, lead_email } = req.body;
 
   if (!disposition) {
     return res.status(400).json({ error: 'disposition required' });
@@ -177,7 +179,55 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
         : undefined,
     }).catch(err => console.error('Interaction sync failed:', err.message));
 
-    res.json(call);
+    // ── Follow-up email from rep's mailbox ────────────────────────
+    let emailResult = {};
+    const repEmail = req.user?.email;
+
+    if (send_follow_up && repEmail && !call.follow_up_email_sent) {
+      // Resolve lead email: request body → HubSpot lookup
+      let resolvedEmail = lead_email;
+      if (!resolvedEmail && call.hubspot_contact_id) {
+        try {
+          const contact = await getContact(call.hubspot_contact_id);
+          resolvedEmail = contact?.properties?.email;
+        } catch (err) {
+          console.warn('[email] HubSpot email lookup failed:', err.message);
+        }
+      }
+
+      // Always save lead_email for auditability
+      if (resolvedEmail) {
+        pool.query('UPDATE nucleus_phone_calls SET lead_email = $1 WHERE id = $2', [resolvedEmail, id])
+          .catch(err => console.error('Failed to save lead_email:', err.message));
+      }
+
+      if (resolvedEmail) {
+        try {
+          await sendFollowUpEmail({
+            fromEmail: repEmail,
+            toEmail: resolvedEmail,
+            leadName: call.lead_name,
+            leadCompany: call.lead_company,
+            products: products_discussed,
+            notes,
+            callerIdentity: call.caller_identity,
+            qualification: qualification || 'info_only',
+          });
+          pool.query('UPDATE nucleus_phone_calls SET follow_up_email_sent = TRUE WHERE id = $1', [id])
+            .catch(err => console.error('Failed to update follow_up_email_sent:', err.message));
+          emailResult = { email_sent: true };
+        } catch (err) {
+          console.error('[email] Follow-up failed:', err.message);
+          pool.query(
+            'UPDATE nucleus_phone_calls SET follow_up_email_error = $1 WHERE id = $2',
+            [err.message.substring(0, 500), id]
+          ).catch(e => console.error('Failed to save email error:', e.message));
+          emailResult = { email_sent: false, email_error: err.message };
+        }
+      }
+    }
+
+    res.json({ ...call, ...emailResult });
   } catch (err) {
     console.error('Disposition save failed:', err.message);
     res.status(500).json({ error: 'Failed to save disposition' });
