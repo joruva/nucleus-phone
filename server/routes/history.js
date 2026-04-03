@@ -198,13 +198,14 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
         }
       }
 
-      // Always save lead_email for auditability
-      if (resolvedEmail) {
+      // Validate and save lead_email for auditability
+      const validEmail = resolvedEmail && EMAIL_RE.test(resolvedEmail);
+      if (validEmail) {
         await pool.query('UPDATE nucleus_phone_calls SET lead_email = $1 WHERE id = $2', [resolvedEmail, id])
           .catch(err => console.error('Failed to save lead_email:', err.message));
       }
 
-      if (resolvedEmail && EMAIL_RE.test(resolvedEmail)) {
+      if (validEmail) {
         try {
           await sendFollowUpEmail({
             fromEmail: repEmail,
@@ -212,7 +213,6 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
             leadName: call.lead_name,
             leadCompany: call.lead_company,
             products: products_discussed,
-            notes,
             callerIdentity: call.caller_identity,
             qualification: qualification || 'info_only',
           });

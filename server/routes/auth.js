@@ -95,9 +95,21 @@ router.get('/callback', async (req, res) => {
     const homeAccountId = result.account?.homeAccountId || '';
 
     // Persist MSAL token cache for per-rep email sending (async, non-blocking login)
+    // The singleton MSAL app's cache contains ALL users who logged in during this process.
+    // Strip it down to only this user's entries before storing.
     if (process.env.MSAL_ENCRYPTION_KEY) {
-      const cacheJson = getMsalApp().getTokenCache().serialize();
-      const encrypted = encrypt(cacheJson);
+      const fullCache = JSON.parse(getMsalApp().getTokenCache().serialize());
+      const userCache = {};
+      for (const section of ['Account', 'IdToken', 'AccessToken', 'RefreshToken', 'AppMetadata']) {
+        if (!fullCache[section]) continue;
+        userCache[section] = {};
+        for (const [key, entry] of Object.entries(fullCache[section])) {
+          if (entry.home_account_id === homeAccountId || section === 'AppMetadata') {
+            userCache[section][key] = entry;
+          }
+        }
+      }
+      const encrypted = encrypt(JSON.stringify(userCache));
       pool.query(
         `INSERT INTO msal_token_cache (partition_key, cache_data, home_account_id, updated_at)
          VALUES ($1, $2, $3, NOW())

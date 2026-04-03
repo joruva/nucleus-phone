@@ -38,7 +38,7 @@ function decrypt(ciphertext) {
   }
   const decipher = createDecipheriv(ALGORITHM, key, iv);
   decipher.setAuthTag(tag);
-  return decipher.update(data) + decipher.final('utf8');
+  return decipher.update(data, null, 'utf8') + decipher.final('utf8');
 }
 
 module.exports = { encrypt, decrypt };

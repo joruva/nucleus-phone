@@ -87,16 +87,23 @@ async function getTokenForUser(email) {
  * Build the follow-up email HTML based on qualification level.
  * Warm Authority register — no hedging, no "I hope this finds you well."
  */
-function buildEmail({ leadName, leadCompany, products, notes, callerName, qualification }) {
-  const firstName = leadName?.split(' ')[0] || '';
-  const productList = (products || []).filter(Boolean);
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function buildEmail({ leadName, leadCompany, products, callerName, qualification }) {
+  const firstName = escapeHtml(leadName?.split(' ')[0] || '');
+  const company = escapeHtml(leadCompany);
+  callerName = escapeHtml(callerName);
+  const productList = (products || []).filter(Boolean).map(escapeHtml);
 
   if (qualification === 'hot') {
     return {
-      subject: `${callerName} from Joruva — your quote for ${leadCompany || 'your shop'}`,
+      subject: `${callerName} from Joruva — your quote for ${company || 'your shop'}`,
       body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #222; max-width: 580px; line-height: 1.6;">
   <p>${firstName},</p>
-  <p>Good talking with you${leadCompany ? ` about what's running at ${leadCompany}` : ''}. Based on what you described, I'm putting together a quote for ${productList.length ? productList.join(', ') : 'the equipment we discussed'}.</p>
+  <p>Good talking with you${leadCompany ? ` about what's running at ${company}` : ''}. Based on what you described, I'm putting together a quote for ${productList.length ? productList.join(', ') : 'the equipment we discussed'}.</p>
   <p>I'll include the compliance documentation package — everything your auditor would need on the air system side. Expect that in your inbox shortly.</p>
   <p>One call to size it right. That's the whole idea.</p>
   <p>${callerName}<br>Joruva Industrial</p>
@@ -109,7 +116,7 @@ function buildEmail({ leadName, leadCompany, products, notes, callerName, qualif
       subject: `${callerName} from Joruva — specs we discussed`,
       body: `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #222; max-width: 580px; line-height: 1.6;">
   <p>${firstName},</p>
-  <p>Thanks for the conversation${leadCompany ? ` about ${leadCompany}'s setup` : ''}. I'm sending over the spec sheets for ${productList.length ? productList.join(', ') : 'the equipment we covered'} so you have everything in one place.</p>
+  <p>Thanks for the conversation${leadCompany ? ` about ${company}'s setup` : ''}. I'm sending over the spec sheets for ${productList.length ? productList.join(', ') : 'the equipment we covered'} so you have everything in one place.</p>
   <p>No rush on any of this. When the timing is right, we're here to size it to your actual demand.</p>
   <p>${callerName}<br>Joruva Industrial</p>
 </div>`,
@@ -130,12 +137,12 @@ function buildEmail({ leadName, leadCompany, products, notes, callerName, qualif
 /**
  * Send a follow-up email from the rep's own mailbox via Graph API.
  */
-async function sendFollowUpEmail({ fromEmail, toEmail, leadName, leadCompany, products, notes, callerIdentity, qualification }) {
+async function sendFollowUpEmail({ fromEmail, toEmail, leadName, leadCompany, products, callerIdentity, qualification }) {
   const user = USER_MAP[fromEmail];
   const callerName = user?.displayName || callerIdentity;
 
   const accessToken = await getTokenForUser(fromEmail);
-  const { subject, body } = buildEmail({ leadName, leadCompany, products, notes, callerName, qualification });
+  const { subject, body } = buildEmail({ leadName, leadCompany, products, callerName, qualification });
 
   const res = await fetch(`${GRAPH_BASE}/me/sendMail`, {
     method: 'POST',
