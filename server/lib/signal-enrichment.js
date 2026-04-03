@@ -145,11 +145,14 @@ async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = 
       }
 
       try {
-        const contacts = await searchPeopleByCompany(company.domain);
+        const result = await searchPeopleByCompany(company.domain);
+        const contacts = result.contacts;
 
-        // Increment credit AFTER successful API call (avoid over-counting on failures)
-        await incrementApolloBudget(1);
-        creditsUsed++;
+        // Increment credits AFTER successful reveals (search is free, reveals cost 1 each)
+        if (result.creditsUsed > 0) {
+          await incrementApolloBudget(result.creditsUsed);
+          creditsUsed += result.creditsUsed;
+        }
 
         // Upsert contacts into v35_pb_contacts
         const norm = normalizeCompanyName(company.company_name);

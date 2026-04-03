@@ -1,11 +1,14 @@
 /**
  * lib/apollo.js — Apollo API integration for identity resolution and contact enrichment.
  *
- * Two capabilities:
- * - matchPerson: single-person lookup (identity-resolver.js, 1 credit)
- * - searchPeopleByCompany: find contacts at a company by domain + title (signal enrichment, 1 credit)
+ * Three capabilities:
+ * - matchPerson: single-person lookup by name/org (identity-resolver.js, 1 credit)
+ * - searchPeopleByCompany: find contacts at a company (free search, no credits)
+ * - revealPerson: get full contact details by Apollo ID (1 credit)
  *
- * Stripped from joruva-v35-scripts/src/lib/apollo.js.
+ * Apollo's API is two-step: search (free, returns anonymized previews with has_phone/has_email flags)
+ * → reveal via /people/match with ID (1 credit, returns full name, email, phone, LinkedIn).
+ * searchPeopleByCompany handles both steps: searches, then reveals only contacts with phone numbers.
  */
 
 const BASE_URL = 'https://api.apollo.io/api/v1';
@@ -24,13 +27,6 @@ const DEFAULT_TITLE_FILTERS = [
 /**
  * Match a person by name + organization. Returns full person object or null.
  * Consumes 1 Apollo credit.
- *
- * @param {Object} params
- * @param {string} params.firstName
- * @param {string} params.lastName
- * @param {string} params.organization
- * @param {string} [params.email]
- * @returns {Promise<Object|null>}
  */
 async function matchPerson({ firstName, lastName, organization, email }) {
   const apiKey = process.env.APOLLO_API_KEY;
@@ -45,10 +41,7 @@ async function matchPerson({ firstName, lastName, organization, email }) {
 
   const resp = await fetch(`${BASE_URL}/people/match`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Api-Key': apiKey,
-    },
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
@@ -62,54 +55,113 @@ async function matchPerson({ firstName, lastName, organization, email }) {
   return data.person || null;
 }
 
+// Webhook URL for async phone number delivery from Apollo
+const PHONE_WEBHOOK_URL = process.env.APOLLO_PHONE_WEBHOOK_URL
+  || 'https://nucleus-phone.onrender.com/api/apollo/phone-webhook';
+
 /**
- * Search for people at a company by domain + title filters.
- * Used by signal enrichment to find callable contacts at signal-scored companies.
- * Consumes 1 Apollo credit per search call.
+ * Reveal a person's full contact details by Apollo ID. Consumes 1 credit.
+ * Phone numbers are delivered asynchronously via webhook — the synchronous
+ * response contains name, email, title, LinkedIn but NOT phone.
  *
- * @param {string} domain - Company domain (e.g. 'acmemanufacturing.com')
- * @param {string[]} [titleFilters] - Job titles to filter by (default: CNC manufacturing personas)
- * @param {number} [perPage] - Max results per call (default 10, max 25)
- * @returns {Promise<Array<{name: string, first_name: string, last_name: string, title: string, phone: string|null, email: string|null, linkedin_url: string|null}>>}
+ * @param {string} apolloId - Apollo person ID from search results
+ * @param {boolean} [requestPhone] - Request async phone delivery via webhook (default true)
+ * @returns {Promise<{name, first_name, last_name, title, phone, email, linkedin_url}|null>}
  */
-async function searchPeopleByCompany(domain, titleFilters = DEFAULT_TITLE_FILTERS, perPage = 10) {
+async function revealPerson(apolloId, requestPhone = true) {
   const apiKey = process.env.APOLLO_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) return null;
 
-  const body = {
-    organization_domains: [domain],
-    person_titles: titleFilters,
-    page: 1,
-    per_page: Math.min(perPage, 25),
-  };
+  const body = { id: apolloId, reveal_personal_emails: false };
+  if (requestPhone) {
+    body.reveal_phone_number = true;
+    body.webhook_url = PHONE_WEBHOOK_URL;
+  }
 
-  const resp = await fetch(`${BASE_URL}/mixed_people/search`, {
+  const resp = await fetch(`${BASE_URL}/people/match`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Api-Key': apiKey,
-    },
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`Apollo people search failed: ${resp.status} ${text.substring(0, 200)}`);
+    throw new Error(`Apollo reveal failed: ${resp.status} ${text.substring(0, 200)}`);
   }
 
   const data = await resp.json();
-  const people = data.people || [];
+  const p = data.person;
+  if (!p) return null;
 
-  return people.map(p => ({
+  return {
     name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
     first_name: p.first_name || null,
     last_name: p.last_name || null,
     title: p.title || null,
-    phone: p.phone_numbers?.[0]?.sanitized_number || p.organization?.phone || null,
+    // Phone arrives async via webhook — will be null in this response
+    phone: p.phone_numbers?.[0]?.sanitized_number || null,
     email: p.email || null,
     linkedin_url: p.linkedin_url || null,
-  }));
+  };
 }
 
-module.exports = { matchPerson, searchPeopleByCompany, DEFAULT_TITLE_FILTERS };
+/**
+ * Search for people at a company, then reveal those with phone numbers.
+ *
+ * Step 1 (free): /mixed_people/api_search — returns anonymized previews with has_direct_phone flag
+ * Step 2 (1 credit each): /people/match with ID — reveals only contacts where has_direct_phone === "Yes"
+ *
+ * Credit cost = number of contacts revealed (only those with phones), NOT total search results.
+ *
+ * @param {string} domain - Company domain
+ * @param {string[]} [titleFilters] - Job titles to filter by
+ * @param {number} [perPage] - Max search results (default 10)
+ * @returns {Promise<{previews: Object[], contacts: Object[], creditsUsed: number}>}
+ */
+async function searchPeopleByCompany(domain, titleFilters = DEFAULT_TITLE_FILTERS, perPage = 10) {
+  const apiKey = process.env.APOLLO_API_KEY;
+  if (!apiKey) return { previews: [], contacts: [], creditsUsed: 0 };
+
+  // Step 1: Free search — get anonymized previews
+  const searchResp = await fetch(`${BASE_URL}/mixed_people/api_search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+    body: JSON.stringify({
+      organization_domains: [domain],
+      person_titles: titleFilters,
+      page: 1,
+      per_page: Math.min(perPage, 25),
+    }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  if (!searchResp.ok) {
+    const text = await searchResp.text().catch(() => '');
+    throw new Error(`Apollo search failed: ${searchResp.status} ${text.substring(0, 200)}`);
+  }
+
+  const searchData = await searchResp.json();
+  const previews = searchData.people || [];
+
+  // Step 2: Reveal only contacts that have phone numbers (saves credits)
+  const withPhone = previews.filter(p => p.has_direct_phone === 'Yes');
+  const contacts = [];
+  let creditsUsed = 0;
+
+  for (const preview of withPhone) {
+    try {
+      const revealed = await revealPerson(preview.id);
+      if (revealed) {
+        contacts.push(revealed);
+        creditsUsed++;
+      }
+    } catch (err) {
+      console.error(`Failed to reveal ${preview.id}:`, err.message);
+    }
+  }
+
+  return { previews, contacts, creditsUsed };
+}
+
+module.exports = { matchPerson, revealPerson, searchPeopleByCompany, DEFAULT_TITLE_FILTERS };

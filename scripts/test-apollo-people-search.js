@@ -2,7 +2,7 @@
 /**
  * scripts/test-apollo-people-search.js
  *
- * Validates Apollo's /v1/mixed_people/search endpoint before building
+ * Validates Apollo's /v1/mixed_people/api_search endpoint before building
  * the batch enrichment system (Phase 4b). Run this ONCE to confirm:
  *   - Auth works with our API key
  *   - Response shape matches expectations
@@ -70,7 +70,7 @@ async function testPeopleSearch() {
   // Test 1: Search by domain + title filters
   console.log('--- Test 1: People search by company domain + titles ---');
   try {
-    const data = await apolloFetch('/mixed_people/search', {
+    const data = await apolloFetch('/mixed_people/api_search', {
       organization_domains: [TEST_DOMAIN],
       person_titles: TITLE_FILTERS,
       page: 1,
@@ -104,7 +104,7 @@ async function testPeopleSearch() {
   // Test 2: Search with no results (nonsense domain)
   console.log('\n--- Test 2: Empty result handling (fake domain) ---');
   try {
-    const data = await apolloFetch('/mixed_people/search', {
+    const data = await apolloFetch('/mixed_people/api_search', {
       organization_domains: ['this-company-does-not-exist-xyz123.com'],
       person_titles: ['CEO'],
       page: 1,
@@ -123,7 +123,7 @@ async function testPeopleSearch() {
   // Test 3: Search by domain only (no title filter) to see full org
   console.log('\n--- Test 3: Domain-only search (no title filter) ---');
   try {
-    const data = await apolloFetch('/mixed_people/search', {
+    const data = await apolloFetch('/mixed_people/api_search', {
       organization_domains: [TEST_DOMAIN],
       page: 1,
       per_page: 5,
