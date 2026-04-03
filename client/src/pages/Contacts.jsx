@@ -1,8 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useContacts from '../hooks/useContacts';
+import { getSignalContacts, getSignalCallbacks } from '../lib/api';
 
-const FILTERS = ['All', 'Never Called', 'Callback Pending', 'Hot'];
+const TIER_COLORS = { spear: 'bg-jv-red', targeted: 'bg-jv-amber', awareness: 'bg-gray-500' };
+const TIER_BORDER = { spear: 'border-jv-red', targeted: 'border-jv-amber', awareness: 'border-gray-500' };
+const TIER_TEXT = { spear: 'text-jv-red', targeted: 'text-jv-amber', awareness: 'text-gray-400' };
+const STATES = ['OH', 'TX', 'CA', 'MI', 'PA', 'CT', 'WI', 'MN', 'NY', 'FL', 'AZ'];
+
+function TierBadge({ tier }) {
+  return (
+    <span className={`${TIER_COLORS[tier] || 'bg-gray-500'} text-white px-1.5 py-0.5 rounded text-[10px] font-bold uppercase`}>
+      {tier}
+    </span>
+  );
+}
+
+function callBadge(callHistory) {
+  if (!callHistory) return { text: 'Never called', cls: 'text-gray-500' };
+  const days = Math.floor((Date.now() - new Date(callHistory.lastCall).getTime()) / 86400000);
+  if (days === 0) return { text: 'Called today', cls: 'text-jv-green' };
+  if (days === 1) return { text: 'Yesterday', cls: 'text-jv-green' };
+  return { text: `${days}d ago`, cls: 'text-jv-muted' };
+}
 
 function dispositionDot(callHistory) {
   if (!callHistory) return 'bg-gray-500';
@@ -16,162 +35,229 @@ function dispositionDot(callHistory) {
   }
 }
 
-function callBadge(callHistory) {
-  if (!callHistory) return { text: 'Never called', cls: 'text-gray-500' };
-  const days = Math.floor((Date.now() - new Date(callHistory.lastCall).getTime()) / 86400000);
-  if (days === 0) return { text: 'Called today', cls: 'text-jv-green' };
-  if (days === 1) return { text: 'Called yesterday', cls: 'text-jv-green' };
-  return { text: `Called ${days}d ago`, cls: 'text-jv-muted' };
+function formatCurrency(amount) {
+  if (!amount) return null;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(amount);
 }
 
-export default function Contacts({ identity, callState, twilioStatus }) {
-  const { contacts, loading, error, fetchContacts } = useContacts();
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState(() => sessionStorage.getItem('contacts_filter') || 'All');
-  const navigate = useNavigate();
-  const listRef = useRef(null);
+function formatExpiry(date) {
+  if (!date) return null;
+  const d = new Date(date);
+  return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
 
-  useEffect(() => {
-    fetchContacts('');
-  }, [fetchContacts]);
+// ── Company Card ────────────────────────────────────────────────────
 
-  // Restore scroll position on mount (back from cockpit)
-  useEffect(() => {
-    if (!loading && listRef.current) {
-      const saved = sessionStorage.getItem('contacts_scroll');
-      if (saved) listRef.current.scrollTop = parseInt(saved, 10);
-    }
-  }, [loading]);
-
-  // Persist filter changes
-  useEffect(() => {
-    sessionStorage.setItem('contacts_filter', filter);
-  }, [filter]);
-
-  // Debounced search
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (search.length >= 2 || search.length === 0) {
-        fetchContacts(search);
-      }
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [search, fetchContacts]);
-
-  function handleCockpit(contact) {
-    // Save scroll position before navigating
-    if (listRef.current) {
-      sessionStorage.setItem('contacts_scroll', String(listRef.current.scrollTop));
-    }
-    navigate(`/cockpit/${contact.id}`);
-  }
-
-  async function handleCall(contact) {
-    if (twilioStatus !== 'ready') return;
-    try {
-      await callState.startCall(contact, identity);
-      navigate('/dialer');
-    } catch (err) {
-      alert('Call failed: ' + err.message);
-    }
-  }
-
-  const filtered = contacts.filter((c) => {
-    if (filter === 'All') return true;
-    if (filter === 'Never Called') return !c.callHistory;
-    if (filter === 'Callback Pending') return c.callHistory?.lastDisposition === 'callback_requested';
-    if (filter === 'Hot') return c.callHistory?.lastDisposition === 'qualified_hot';
-    return true;
-  });
+function CompanyCard({ company, navigate, twilioStatus }) {
+  const certExpiry = formatExpiry(company.cert_expiry_date);
+  const contract = formatCurrency(company.contract_total);
+  const details = [
+    certExpiry && `${company.cert_standard || 'Cert'} expires ${certExpiry}`,
+    contract && `${company.dod_flag ? 'DoD ' : ''}${contract}`,
+    company.source_count > 1 && `${company.source_count} sources`,
+  ].filter(Boolean);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Search */}
-      <div className="px-4 pt-4 pb-2">
-        <input
-          type="search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, company, phone..."
-          className="w-full px-4 py-2.5 rounded-lg bg-jv-card border border-jv-border text-white placeholder-jv-muted focus:outline-none focus:border-jv-blue text-sm"
-        />
+    <div className={`rounded-xl bg-jv-card border-l-4 ${TIER_BORDER[company.signal_tier] || 'border-gray-500'} border border-jv-border overflow-hidden`}>
+      {/* Company header */}
+      <div className="p-3 pb-1">
+        <div className="flex items-center gap-2">
+          <TierBadge tier={company.signal_tier} />
+          <span className="font-medium text-sm truncate">{company.company_name || company.domain}</span>
+          <span className="text-jv-amber text-xs ml-auto shrink-0">⚡ {company.signal_score}</span>
+        </div>
+        {details.length > 0 && (
+          <p className="text-xs text-jv-muted mt-1 ml-8">
+            {details.join(' · ')}
+          </p>
+        )}
       </div>
 
-      {/* Filter pills */}
-      <div className="flex gap-2 px-4 pb-3 overflow-x-auto">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-full text-xs whitespace-nowrap transition-colors ${
-              filter === f
-                ? 'bg-jv-blue text-white'
-                : 'bg-jv-card border border-jv-border text-jv-muted'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {/* Contact list */}
-      <div ref={listRef} className="flex-1 overflow-y-auto scroll-container px-4 space-y-2 pb-4">
-        {loading && contacts.length === 0 && (
-          <p className="text-center text-jv-muted py-8">Loading contacts...</p>
-        )}
-        {error && (
-          <p className="text-center text-jv-red py-8">{error}</p>
-        )}
-        {!loading && filtered.length === 0 && (
-          <p className="text-center text-jv-muted py-8">No contacts found</p>
-        )}
-
-        {filtered.map((contact) => {
-          const props = contact.properties || {};
-          const name = `${props.firstname || ''} ${props.lastname || ''}`.trim() || 'Unknown';
-          const phone = props.phone || props.mobilephone || '';
-          const badge = callBadge(contact.callHistory);
-
-          return (
-            <div
-              key={contact.id}
-              className="rounded-xl overflow-hidden bg-jv-card border border-jv-border"
-            >
+      {/* Contacts */}
+      <div className="px-3 pb-3">
+        {company.contacts && company.contacts.length > 0 ? (
+          company.contacts.map((contact, i) => {
+            const badge = callBadge(contact.call_history);
+            return (
               <div
-                className="flex items-center justify-between p-4 cursor-pointer"
-                onClick={() => handleCockpit(contact)}
+                key={`${contact.linkedin_url || contact.full_name}-${i}`}
+                className="flex items-center justify-between py-1.5 border-t border-jv-border/50 first:border-0"
               >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${dispositionDot(contact.callHistory)}`} />
+                <div className="flex items-center gap-2 min-w-0 flex-1">
+                  {contact.call_history && (
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${dispositionDot(contact.call_history)}`} />
+                  )}
                   <div className="min-w-0">
-                    <p className="font-medium truncate">{name}</p>
-                    <p className="text-sm text-jv-muted truncate">
-                      {props.company || 'No company'} {phone && `· ${phone}`}
-                    </p>
+                    <span className="text-xs font-medium truncate block">{contact.full_name || 'Unknown'}</span>
+                    <span className="text-[10px] text-jv-muted truncate block">
+                      {contact.title || 'No title'}
+                      {contact.phone && ` · ${contact.phone}`}
+                    </span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className={`text-xs ${badge.cls}`}>{badge.text}</span>
-                  {phone && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`text-[10px] ${badge.cls}`}>{badge.text}</span>
+                  {contact.phone && (
                     <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleCall(contact);
-                      }}
+                      onClick={() => navigate(`/cockpit/${company.domain}`)}
                       disabled={twilioStatus !== 'ready'}
-                      className="w-10 h-10 flex items-center justify-center rounded-full bg-jv-green/20 text-jv-green hover:bg-jv-green/30 transition-colors disabled:opacity-30"
+                      className="w-7 h-7 flex items-center justify-center rounded-full bg-jv-green/20 text-jv-green hover:bg-jv-green/30 transition-colors disabled:opacity-30"
                     >
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/>
                       </svg>
                     </button>
                   )}
-                  <span className="text-jv-muted text-xs">&#8250;</span>
                 </div>
               </div>
+            );
+          })
+        ) : (
+          <p className="text-xs text-jv-muted py-2 border-t border-jv-border/50">
+            {company.no_phone_count > 0
+              ? `${company.no_phone_count} contacts without phone`
+              : 'No contacts found'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Contacts Page (Signal Queue only) ──────────────────────────
+
+export default function Contacts({ identity, callState, twilioStatus }) {
+  const [companies, setCompanies] = useState([]);
+  const [callbacks, setCallbacks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tier, setTier] = useState('');
+  const [state, setState] = useState('');
+  const [awarenessOpen, setAwarenessOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const fetchSignal = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getSignalContacts({ signal_tier: tier || undefined, geo_state: state || undefined, limit: 200 });
+      setCompanies(data.companies || []);
+    } catch (err) { console.error('Signal contacts fetch failed:', err); setCompanies([]); }
+    finally { setLoading(false); }
+  }, [tier, state]);
+
+  useEffect(() => { fetchSignal(); }, [fetchSignal]);
+
+  // Poll callbacks every 60s
+  useEffect(() => {
+    const fetchCb = async () => {
+      try {
+        const data = await getSignalCallbacks();
+        setCallbacks(data.callbacks || []);
+      } catch { /* graceful degradation */ }
+    };
+    fetchCb();
+    const interval = setInterval(fetchCb, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const spearTargeted = companies.filter(c => c.signal_tier !== 'awareness');
+  const awareness = companies.filter(c => c.signal_tier === 'awareness');
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Tier + state filters */}
+      <div className="flex gap-2 px-4 pt-4 pb-2 flex-wrap">
+        {['spear', 'targeted', 'awareness'].map(t => (
+          <button
+            key={t}
+            onClick={() => setTier(prev => prev === t ? '' : t)}
+            className={`px-3 py-1 rounded-full text-xs uppercase font-bold transition-colors ${
+              tier === t
+                ? `${TIER_COLORS[t]} text-white`
+                : `bg-jv-card border ${TIER_BORDER[t]} ${TIER_TEXT[t]}`
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+        <select
+          value={state}
+          onChange={e => setState(e.target.value)}
+          className="px-2 py-1 rounded-lg bg-jv-card border border-jv-border text-xs text-jv-muted"
+        >
+          <option value="">All states</option>
+          {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {/* Callbacks banner */}
+      {callbacks.length > 0 && (
+        <div className="mx-4 mb-3 rounded-lg bg-jv-red/10 border border-jv-red/30 p-3">
+          <p className="text-xs font-bold text-jv-red mb-1">CALLBACKS ({callbacks.length})</p>
+          {callbacks.slice(0, 3).map(cb => (
+            <div key={cb.id} className="flex items-center justify-between py-1">
+              <div className="text-xs">
+                <span className="text-white font-medium">{cb.company_name}</span>
+                <span className="text-jv-muted ml-2">
+                  {cb.trigger_reason === 'lead_gen' ? 'Lead gen form' : 'Email replied'}
+                </span>
+              </div>
+              <button
+                onClick={() => navigate(`/cockpit/${cb.domain}`)}
+                className="text-xs px-2 py-0.5 rounded bg-jv-red/20 text-jv-red font-medium"
+              >
+                Call Now
+              </button>
             </div>
-          );
-        })}
+          ))}
+        </div>
+      )}
+
+      {/* Company list */}
+      <div className="flex-1 overflow-y-auto scroll-container px-4 space-y-3 pb-4">
+        {loading && <p className="text-center text-jv-muted py-8">Loading signal queue...</p>}
+        {!loading && companies.length === 0 && (
+          <p className="text-center text-jv-muted py-8">
+            No companies match filters.{' '}
+            {tier === '' ? 'Run signal loaders to populate the pipeline.' : 'Try a different tier.'}
+          </p>
+        )}
+
+        {spearTargeted.map(company => (
+          <CompanyCard
+            key={company.domain}
+            company={company}
+            navigate={navigate}
+            twilioStatus={twilioStatus}
+          />
+        ))}
+
+        {/* Awareness section — collapsed by default */}
+        {awareness.length > 0 && !tier && (
+          <div className="mt-4">
+            <button
+              onClick={() => setAwarenessOpen(!awarenessOpen)}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-jv-card border border-jv-border text-xs text-jv-muted"
+            >
+              <span>AWARENESS ({awareness.length} companies)</span>
+              <span>{awarenessOpen ? '▾' : '▸'}</span>
+            </button>
+            {awarenessOpen && (
+              <div className="space-y-3 mt-3">
+                {awareness.map(company => (
+                  <CompanyCard
+                    key={company.domain}
+                    company={company}
+                    navigate={navigate}
+                    twilioStatus={twilioStatus}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -301,6 +301,36 @@ async function initSchema() {
     `);
     console.log('msal_token_cache + email columns ready');
 
+    // ── Signal enrichment (Phase 4b) ─────────────────────────────
+    // Extend v35_pb_contacts for Apollo-enriched contacts.
+    // Full migration with constraint surgery is in migrations/004_signal_contacts_schema.sql
+    // — these are the safe idempotent parts that can run on every startup.
+    await client.query(`
+      ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'phantombuster';
+      ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS phone TEXT;
+      ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS domain TEXT;
+      ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS enrichment_batch_id TEXT;
+      CREATE INDEX IF NOT EXISTS idx_pbc_domain ON v35_pb_contacts(domain) WHERE domain IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_pbc_phone ON v35_pb_contacts(phone) WHERE phone IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_pbc_source ON v35_pb_contacts(source);
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS signal_enrichment_jobs (
+        id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed', 'paused')),
+        tiers TEXT[] NOT NULL,
+        total_companies INT,
+        processed_companies INT DEFAULT 0,
+        credits_used INT DEFAULT 0,
+        last_processed_domain TEXT,
+        started_at TIMESTAMPTZ DEFAULT NOW(),
+        completed_at TIMESTAMPTZ,
+        error TEXT
+      );
+    `);
+    console.log('signal enrichment schema ready');
+
   } finally {
     client.release();
   }

@@ -74,12 +74,16 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
           ).then(r => r.rows).catch(() => [])
         : Promise.resolve([]),
 
-      // 3: ICP score from lead reservoir (case-insensitive exact match)
+      // 3: ICP score + signal metadata (single query via LEFT JOIN, avoids duplicate reservoir lookup)
       identity.company
         ? pool.query(
-            `SELECT domain, fit_score, fit_reason, persona, segment
-             FROM v35_lead_reservoir
-             WHERE LOWER(company_name) = LOWER($1)
+            `SELECT lr.domain, lr.fit_score, lr.fit_reason, lr.persona, lr.segment,
+                    sm.signal_tier, sm.signal_score, sm.source_count,
+                    sm.cert_expiry_date, sm.cert_standard, sm.cert_body,
+                    sm.contract_total, sm.dod_flag, sm.signal_sources
+             FROM v35_lead_reservoir lr
+             LEFT JOIN v35_signal_metadata sm ON sm.domain = lr.domain
+             WHERE LOWER(lr.company_name) = LOWER($1)
              LIMIT 1`,
             [identity.company]
           ).then(r => r.rows[0] || null).catch(() => null)
@@ -117,11 +121,25 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       interactionHistory,
       priorCalls,
       pipelineData,
-      icpScore,
+      icpAndSignal,
       qaIntel,
       emailEngagement,
       companyData,
     ] = await Promise.all(queries);
+
+    // Split combined query #3 into ICP score and signal metadata
+    const icpScore = icpAndSignal
+      ? { domain: icpAndSignal.domain, fit_score: icpAndSignal.fit_score,
+          fit_reason: icpAndSignal.fit_reason, persona: icpAndSignal.persona,
+          segment: icpAndSignal.segment }
+      : null;
+    const signalMetadata = icpAndSignal?.signal_tier
+      ? { signal_tier: icpAndSignal.signal_tier, signal_score: icpAndSignal.signal_score,
+          source_count: icpAndSignal.source_count, cert_expiry_date: icpAndSignal.cert_expiry_date,
+          cert_standard: icpAndSignal.cert_standard, cert_body: icpAndSignal.cert_body,
+          contract_total: icpAndSignal.contract_total, dod_flag: icpAndSignal.dod_flag,
+          signal_sources: icpAndSignal.signal_sources }
+      : null;
 
     // Step 3: Claude rapport intelligence
     const assembled = {
@@ -133,6 +151,7 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       qaIntel,
       emailEngagement,
       companyData: companyData?.properties || null,
+      signalMetadata,
     };
 
     const rapport = await generateRapportIntel(assembled);
@@ -148,6 +167,7 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       qaIntel,
       emailEngagement,
       companyData: companyData?.properties || null,
+      signalMetadata,
     });
   } catch (err) {
     console.error('Cockpit assembly failed:', err.message);

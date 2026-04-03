@@ -2,8 +2,43 @@ const { Router } = require('express');
 const { apiKeyAuth } = require('../middleware/auth');
 const { searchContacts, getContact } = require('../lib/hubspot');
 const { pool } = require('../db');
+const { getSignalContacts, getContactsForDomain } = require('../lib/signal-contacts');
 
 const router = Router();
+
+// ── Signal-scored contacts (must be before /:id) ────────────────────
+
+// GET /api/contacts/signal — companies with nested contacts, ordered by signal_score
+router.get('/signal', apiKeyAuth, async (req, res) => {
+  try {
+    const { signal_tier, geo_state, has_phone, limit = '50', offset = '0' } = req.query;
+    const result = await getSignalContacts({
+      signal_tier: signal_tier || undefined,
+      geo_state: geo_state || undefined,
+      has_phone: has_phone !== 'false', // default true
+      limit: parseInt(limit, 10) || 50,
+      offset: parseInt(offset, 10) || 0,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('Signal contacts fetch failed:', err.message);
+    res.status(500).json({ error: 'Failed to fetch signal contacts' });
+  }
+});
+
+// GET /api/contacts/signal/:domain — all contacts at a specific signal-scored company
+router.get('/signal/:domain', apiKeyAuth, async (req, res) => {
+  try {
+    const result = await getContactsForDomain(req.params.domain);
+    if (!result.company) return res.status(404).json({ error: 'Domain not found in reservoir' });
+    res.json(result);
+  } catch (err) {
+    console.error('Domain contacts fetch failed:', err.message);
+    res.status(500).json({ error: 'Failed to fetch domain contacts' });
+  }
+});
+
+// ── HubSpot CRM contacts ────────────────────────────────────────────
 
 // GET /api/contacts — search/list HubSpot contacts
 router.get('/', apiKeyAuth, async (req, res) => {

@@ -1,0 +1,257 @@
+/**
+ * lib/signal-enrichment.js — Batch Apollo enrichment for signal-scored companies.
+ *
+ * Finds SPEAR + TARGETED companies that don't yet have Apollo contacts,
+ * calls Apollo people search for each, and stores results in v35_pb_contacts.
+ *
+ * Credit tracking: Uses V3.5's v35_credit_daily_ledger table (shared Postgres).
+ * Credits are incremented AFTER successful API calls to avoid over-counting on failures.
+ *
+ * Designed to run as a fire-and-forget background job triggered via API or CLI.
+ * Supports resume after interruption via last_processed_domain cursor.
+ */
+
+const { pool } = require('../db');
+const { searchPeopleByCompany } = require('./apollo');
+const { normalizeCompanyName } = require('./company-normalizer');
+
+const APOLLO_DAILY_BUDGET = 400; // Matches V3.5 CAPACITY.DAILY_BUDGET.apollo
+const BUDGET_EXHAUSTED_PCT = 0.95; // Stop at 95% to leave headroom for V3.5 pipeline
+const VALID_TIERS = new Set(['spear', 'targeted', 'awareness']);
+
+/**
+ * Check remaining Apollo budget for today.
+ * Reads directly from v35_credit_daily_ledger (same Postgres).
+ */
+async function checkApolloBudget() {
+  const result = await pool.query(
+    `SELECT consumed, remaining, pct_consumed
+     FROM v35_credit_daily_ledger
+     WHERE ledger_date = CURRENT_DATE AND service = 'apollo'`,
+  );
+
+  if (result.rows.length === 0) {
+    return { allowed: true, remaining: APOLLO_DAILY_BUDGET, consumed: 0 };
+  }
+
+  const row = result.rows[0];
+  const allowed = parseFloat(row.pct_consumed) < BUDGET_EXHAUSTED_PCT * 100;
+  return {
+    allowed,
+    remaining: parseInt(row.remaining, 10),
+    consumed: parseInt(row.consumed, 10),
+  };
+}
+
+/**
+ * Increment Apollo credit after a successful API call.
+ * Uses the same ledger as V3.5's credit-tracker.js (UPSERT pattern).
+ */
+async function incrementApolloBudget(amount = 1) {
+  const result = await pool.query(
+    `INSERT INTO v35_credit_daily_ledger (ledger_date, service, budget_limit, consumed, last_increment_at)
+     VALUES (CURRENT_DATE, 'apollo', $1, $2, NOW())
+     ON CONFLICT (ledger_date, service) DO UPDATE SET
+       consumed = v35_credit_daily_ledger.consumed + $2,
+       last_increment_at = NOW()
+     RETURNING consumed, remaining, pct_consumed`,
+    [APOLLO_DAILY_BUDGET, amount],
+  );
+
+  const row = result.rows[0];
+  const allowed = parseFloat(row.pct_consumed) < BUDGET_EXHAUSTED_PCT * 100;
+  return { allowed, remaining: parseInt(row.remaining, 10), consumed: parseInt(row.consumed, 10) };
+}
+
+/**
+ * Run batch enrichment for signal-scored companies.
+ *
+ * @param {Object} opts
+ * @param {string[]} [opts.tiers] - Signal tiers to enrich (default: ['spear', 'targeted'])
+ * @param {string} [opts.resumeFrom] - Domain to resume from (alphabetical cursor)
+ * @param {string} [opts.jobId] - Existing job ID to resume, or null to create new
+ * @returns {Promise<Object>} Job result summary
+ */
+async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = null, jobId = null } = {}) {
+  // Validate tiers
+  const validTiers = tiers.filter(t => VALID_TIERS.has(t));
+  if (validTiers.length === 0) throw new Error('No valid tiers provided');
+
+  // Create or resume job
+  if (!jobId) {
+    const result = await pool.query(
+      `INSERT INTO signal_enrichment_jobs (tiers, status)
+       VALUES ($1, 'running')
+       RETURNING id`,
+      [validTiers],
+    );
+    jobId = result.rows[0].id;
+  } else {
+    await pool.query(
+      `UPDATE signal_enrichment_jobs SET status = 'running' WHERE id = $1`,
+      [jobId],
+    );
+  }
+
+  try {
+    // Find companies that need enrichment (no Apollo contacts yet)
+    const cursorCondition = resumeFrom ? `AND sm.domain > $2` : '';
+    const queryValues = resumeFrom ? [validTiers, resumeFrom] : [validTiers];
+
+    const companiesResult = await pool.query(
+      `SELECT sm.domain, lr.company_name
+       FROM v35_signal_metadata sm
+       JOIN v35_lead_reservoir lr ON lr.domain = sm.domain
+       WHERE sm.signal_tier = ANY($1)
+         AND NOT EXISTS (
+           SELECT 1 FROM v35_pb_contacts pb
+           WHERE pb.domain = sm.domain AND pb.source = 'apollo'
+         )
+         ${cursorCondition}
+       ORDER BY sm.domain ASC
+       LIMIT 500`,
+      queryValues,
+    );
+
+    const companies = companiesResult.rows;
+
+    await pool.query(
+      `UPDATE signal_enrichment_jobs SET total_companies = $2 WHERE id = $1`,
+      [jobId, companies.length],
+    );
+
+    if (companies.length === 0) {
+      await pool.query(
+        `UPDATE signal_enrichment_jobs SET status = 'completed', completed_at = NOW() WHERE id = $1`,
+        [jobId],
+      );
+      return { jobId, status: 'completed', processed: 0, creditsUsed: 0, message: 'No companies need enrichment' };
+    }
+
+    let processed = 0;
+    let creditsUsed = 0;
+    let lastDomain = resumeFrom;
+
+    for (const company of companies) {
+      // Check budget before each call
+      const budget = await checkApolloBudget();
+      if (!budget.allowed) {
+        await updateJobProgress(jobId, 'paused', processed, creditsUsed, lastDomain);
+        return {
+          jobId, status: 'paused', processed, creditsUsed,
+          message: `Budget exhausted (${budget.consumed}/${APOLLO_DAILY_BUDGET}). Resume tomorrow.`,
+          resumeFrom: lastDomain,
+        };
+      }
+
+      try {
+        const contacts = await searchPeopleByCompany(company.domain);
+
+        // Increment credit AFTER successful API call (avoid over-counting on failures)
+        await incrementApolloBudget(1);
+        creditsUsed++;
+
+        // Upsert contacts into v35_pb_contacts
+        const norm = normalizeCompanyName(company.company_name);
+        for (const c of contacts) {
+          if (!c.email && !c.linkedin_url) continue;
+
+          await pool.query(
+            `INSERT INTO v35_pb_contacts
+               (full_name, first_name, last_name, title, company_name, company_name_norm,
+                linkedin_profile_url, email, phone, domain, source, enrichment_batch_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'apollo', $11)
+             ON CONFLICT (domain, email)
+               WHERE source = 'apollo' AND email IS NOT NULL
+             DO UPDATE SET
+               phone = COALESCE(EXCLUDED.phone, v35_pb_contacts.phone),
+               title = COALESCE(EXCLUDED.title, v35_pb_contacts.title),
+               linkedin_profile_url = COALESCE(EXCLUDED.linkedin_profile_url, v35_pb_contacts.linkedin_profile_url)`,
+            [
+              c.name, c.first_name, c.last_name, c.title,
+              company.company_name, norm,
+              c.linkedin_url, c.email, c.phone, company.domain, jobId,
+            ],
+          );
+        }
+
+        processed++;
+        lastDomain = company.domain;
+
+        // Flush progress every 10 companies
+        if (processed % 10 === 0) {
+          await updateJobProgress(jobId, 'running', processed, creditsUsed, lastDomain);
+        }
+      } catch (err) {
+        console.error(`Enrichment failed for ${company.domain}:`, err.message);
+        // Continue to next company — don't stop the whole batch for one failure
+        lastDomain = company.domain;
+      }
+    }
+
+    // Final progress flush
+    await updateJobProgress(jobId, 'running', processed, creditsUsed, lastDomain);
+
+    // Check if more companies remain
+    const moreResult = await pool.query(
+      `SELECT EXISTS (
+         SELECT 1 FROM v35_signal_metadata sm
+         WHERE sm.signal_tier = ANY($1)
+           AND sm.domain > $2
+           AND NOT EXISTS (
+             SELECT 1 FROM v35_pb_contacts pb
+             WHERE pb.domain = sm.domain AND pb.source = 'apollo'
+           )
+       ) AS has_more`,
+      [validTiers, lastDomain],
+    );
+
+    const hasMore = moreResult.rows[0]?.has_more;
+    const finalStatus = hasMore ? 'running' : 'completed';
+
+    await pool.query(
+      `UPDATE signal_enrichment_jobs
+       SET status = $2, last_processed_domain = $3
+           ${finalStatus === 'completed' ? ', completed_at = NOW()' : ''}
+       WHERE id = $1`,
+      [jobId, finalStatus, lastDomain],
+    );
+
+    return {
+      jobId, status: finalStatus, processed, creditsUsed,
+      message: hasMore ? `Processed ${processed} companies, more remain. Run again to continue.` : 'All companies enriched.',
+      resumeFrom: hasMore ? lastDomain : null,
+    };
+  } catch (err) {
+    await pool.query(
+      `UPDATE signal_enrichment_jobs SET status = 'failed', error = $2 WHERE id = $1`,
+      [jobId, err.message],
+    );
+    throw err;
+  }
+}
+
+/**
+ * Update job progress with absolute values (not relative increments).
+ */
+async function updateJobProgress(jobId, status, processed, creditsUsed, lastDomain) {
+  await pool.query(
+    `UPDATE signal_enrichment_jobs
+     SET status = $2, processed_companies = $3, credits_used = $4, last_processed_domain = $5
+     WHERE id = $1`,
+    [jobId, status, processed, creditsUsed, lastDomain],
+  );
+}
+
+/**
+ * Get job status.
+ */
+async function getJobStatus(jobId) {
+  const result = await pool.query(
+    `SELECT * FROM signal_enrichment_jobs WHERE id = $1`,
+    [jobId],
+  );
+  return result.rows[0] || null;
+}
+
+module.exports = { runBatchEnrichment, getJobStatus, checkApolloBudget };
