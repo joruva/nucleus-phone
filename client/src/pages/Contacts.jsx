@@ -102,7 +102,7 @@ function CompanyCard({ company, navigate, twilioStatus }) {
                   <span className={`text-[10px] ${badge.cls}`}>{badge.text}</span>
                   {contact.phone && (
                     <button
-                      onClick={() => navigate(`/cockpit/${company.domain}`)}
+                      onClick={() => navigate(`/cockpit/${encodeURIComponent(contact.phone)}`)}
                       disabled={twilioStatus !== 'ready'}
                       className="w-7 h-7 flex items-center justify-center rounded-full bg-jv-green/20 text-jv-green hover:bg-jv-green/30 transition-colors disabled:opacity-30"
                     >
@@ -206,7 +206,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
                 </span>
               </div>
               <button
-                onClick={() => navigate(`/cockpit/${cb.domain}`)}
+                onClick={() => navigate(`/cockpit/${encodeURIComponent(cb.domain)}`)}
                 className="text-xs px-2 py-0.5 rounded bg-jv-red/20 text-jv-red font-medium"
               >
                 Call Now
