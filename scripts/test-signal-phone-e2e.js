@@ -98,7 +98,16 @@ async function testCockpitWithPhone(phone, expectedName) {
   assert('Identity is NOT "Unknown"', data.identity?.name !== 'Unknown' && data.identity?.name !== 'Unknown Contact',
     `got "${data.identity?.name}" — identity resolver failed to find contact`);
   assert('Has rapport/briefing', !!data.rapport, data.rapport ? 'present' : 'missing');
-  assert('Has signalMetadata', !!data.signalMetadata, data.signalMetadata ? `tier=${data.signalMetadata.signal_tier}` : 'MISSING — cockpit not returning signal data');
+  // signalMetadata is only present when the contact's company is in v35_signal_metadata.
+  // Not every PB contact is at a signal-scored company — null is valid.
+  assert('Has signalMetadata (or contact not at signal company)',
+    data.signalMetadata !== undefined,
+    'signalMetadata key missing from response');
+  if (data.signalMetadata) {
+    console.log(`  Signal: tier=${data.signalMetadata.signal_tier}, score=${data.signalMetadata.signal_score}`);
+  } else {
+    console.log(`  Signal: none (contact's company not in signal pipeline — this is OK)`);
+  }
 
   if (data.identity) {
     console.log(`\n  Identity resolved:`);
