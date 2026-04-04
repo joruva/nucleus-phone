@@ -59,11 +59,17 @@ async function getSignalContacts({
       `SELECT lr.domain, lr.company_name, lr.geo_state,
               lr.enrichment_status,
               sm.signal_tier, sm.signal_score, sm.source_count,
-              sm.cert_expiry_date, sm.cert_standard, sm.contract_total, sm.dod_flag
+              sm.cert_expiry_date, sm.cert_standard, sm.contract_total, sm.dod_flag,
+              EXISTS (
+                SELECT 1 FROM v35_pb_contacts pb
+                WHERE pb.company_name_norm = LOWER(REGEXP_REPLACE(
+                  lr.company_name, ',?\\s*(Inc\\.?|LLC|Corp\\.?|Ltd\\.?|Co\\.?|LP|L\\.P\\.?)\\s*$', '', 'i'
+                ))
+              ) AS has_contacts
        FROM v35_signal_metadata sm
        JOIN v35_lead_reservoir lr ON lr.domain = sm.domain
        ${where}
-       ORDER BY sm.signal_score DESC NULLS LAST
+       ORDER BY has_contacts DESC, sm.signal_score DESC NULLS LAST
        LIMIT $${idx} OFFSET $${idx + 1}`,
       [...values, lim, off],
     ),
