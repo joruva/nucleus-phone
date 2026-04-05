@@ -114,7 +114,7 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
 
         {/* CENTER — Main Viewscreen */}
         <div className="min-w-0 flex flex-col">
-          <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} contact={d.identity} callId={liveCallId} />
+          <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} contact={d.identity} callId={liveCallId} isPractice={false} />
           <CompanyVernacular vernacular={d.companyVernacular} />
           <CompanyIntel
             companyData={d.companyData}

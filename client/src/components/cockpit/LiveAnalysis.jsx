@@ -26,7 +26,7 @@ function formatPrice(price) {
   return `$${Number(price).toLocaleString()}`;
 }
 
-export default function LiveAnalysis({ data, active, contact, callId }) {
+export default function LiveAnalysis({ data, active, contact, callId, isPractice = true }) {
   const safe = data || {};
   const { equipment = [], sizing, recommendation, connected = false } = safe;
 
@@ -115,7 +115,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             </div>
             <p className="text-sm font-normal" style={{ color: 'var(--cockpit-live-900)' }}>
               {!active
-                ? 'Start a practice call to activate'
+                ? isPractice ? 'Start a practice call to activate' : 'Call now to activate'
                 : connected
                   ? 'Listening for equipment mentions...'
                   : 'Connecting...'}
@@ -123,7 +123,7 @@ export default function LiveAnalysis({ data, active, contact, callId }) {
             <p className="text-[11px] mt-1" style={{ color: 'var(--cockpit-text-muted)' }}>
               {active
                 ? 'Equipment detections appear here in real time'
-                : 'Select a difficulty and begin your call'}
+                : isPractice ? 'Select a difficulty and begin your call' : 'Equipment detections will appear during the call'}
             </p>
           </div>
         </div>
