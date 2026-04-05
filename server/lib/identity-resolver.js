@@ -83,9 +83,10 @@ async function resolve(identifier) {
   let company = props.company || null;
   const phone = normalizePhone(identifier) || normalizePhone(props.phone) || null;
 
-  // Step 1b: If HubSpot didn't find the contact, try v35_pb_contacts by phone number.
-  // Dropcontact-enriched PB contacts have phone numbers but aren't in HubSpot.
-  // Try raw identifier first (e.g. "+1 734-656-2200"), then normalized digits.
+  let pbData = null;
+
+  // Step 1b: If HubSpot didn't find the contact, try v35_pb_contacts by phone or email.
+  // Apollo/Dropcontact-enriched PB contacts may not be in HubSpot yet.
   if (!hsContact && (phone || type === 'phone')) {
     try {
       const pbByPhone = await lookupPbContactByPhone(identifier, phone);
@@ -98,9 +99,35 @@ async function resolve(identifier) {
     }
   }
 
+  // Step 1c: Email-based PB lookup (Apollo-enriched contacts with email but not in HubSpot)
+  if (!hsContact && !name && type === 'email') {
+    try {
+      const { rows } = await pool.query(
+        `SELECT full_name, first_name, last_name, title, company_name, domain,
+                linkedin_profile_url, phone, email
+         FROM v35_pb_contacts WHERE email = $1 LIMIT 1`,
+        [identifier.toLowerCase()]
+      );
+      if (rows[0]) {
+        name = rows[0].full_name;
+        company = rows[0].company_name;
+        // Pre-seed pbData so step 2 doesn't re-query
+        pbData = {
+          full_name: rows[0].full_name,
+          title: rows[0].title,
+          linkedinUrl: rows[0].linkedin_profile_url,
+          company: rows[0].company_name,
+          domain: rows[0].domain,
+        };
+      }
+    } catch (err) {
+      console.warn('Identity resolver: PB email lookup failed:', err.message);
+    }
+  }
+
   // Step 2: PB contacts lookup by company + name (enriches with LinkedIn, title, etc.)
-  let pbData = null;
-  if (company && name) {
+  // pbData may already be set from step 1c (email-based PB lookup)
+  if (!pbData && company && name) {
     try {
       pbData = await lookupPbContact(company, name);
     } catch (err) {
