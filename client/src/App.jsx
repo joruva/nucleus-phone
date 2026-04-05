@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Component } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Shell from './components/layout/Shell';
 import Login from './pages/Login';
@@ -12,7 +12,42 @@ import Scoreboard from './pages/Scoreboard';
 import useTwilioDevice from './hooks/useTwilioDevice';
 import useCallState from './hooks/useCallState';
 
-export default function App() {
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, info) {
+    console.error('Nucleus Phone uncaught error:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
+          <h1 className="text-xl font-semibold text-jv-text">Something went wrong</h1>
+          <p className="text-jv-muted text-sm max-w-md text-center">
+            {this.state.error?.message || 'An unexpected error occurred.'}
+          </p>
+          <button
+            className="px-4 py-2 bg-jv-accent text-white rounded hover:opacity-90"
+            onClick={() => window.location.reload()}
+          >
+            Reload
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+function AppContent() {
   const [user, setUser] = useState(null); // { identity, role, email }
   const [loading, setLoading] = useState(true);
   const [emailReady, setEmailReady] = useState(null); // null = loading, true = tokens exist, false = re-login needed
@@ -136,5 +171,13 @@ export default function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
   );
 }

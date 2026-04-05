@@ -151,7 +151,10 @@ router.post('/', async (req, res) => {
 
       sendSlackAlert(slackMsg)
         .then(ok => {
-          if (ok) pool.query('UPDATE quote_requests SET slack_notified = true WHERE id = $1', [quoteRequestId]);
+          if (ok) {
+            pool.query('UPDATE quote_requests SET slack_notified = true WHERE id = $1', [quoteRequestId])
+              .catch(err => console.error('quote-request: slack_notified flag update failed:', err.message));
+          }
         })
         .catch(err => console.error('quote-request: quote Slack failed:', err.message));
 

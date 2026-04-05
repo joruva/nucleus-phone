@@ -54,7 +54,7 @@ function listActiveConferences() {
 // A conference older than 2 hours with no participants is abandoned.
 const STALE_NO_SID_MS = 5 * 60 * 1000;
 const STALE_MAX_MS = 2 * 60 * 60 * 1000;
-setInterval(() => {
+const sweepInterval = setInterval(() => {
   const now = Date.now();
   for (const [name, conf] of activeConferences) {
     const age = now - conf.startedAt.getTime();
@@ -66,6 +66,7 @@ setInterval(() => {
     }
   }
 }, 2 * 60 * 1000);
+sweepInterval.unref();
 
 module.exports = {
   createConference,

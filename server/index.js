@@ -81,6 +81,12 @@ if (require.main === module) {
     console.error('Failed to start:', err);
     process.exit(1);
   });
+
+  // Graceful shutdown — Render sends SIGTERM before killing the process
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    process.exit(0);
+  });
 }
 
 module.exports = { app };

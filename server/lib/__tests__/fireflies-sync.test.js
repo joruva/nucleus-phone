@@ -200,7 +200,9 @@ describe('sync cursor', () => {
   });
 
   test('updates sync cursor after processing', async () => {
-    const transcript = makeTranscript({ date: '2026-03-27T12:00:00Z' });
+    // Use a date guaranteed to be after the 7-day seed lookback
+    const recentDate = new Date(Date.now() - 3600000).toISOString(); // 1 hour ago
+    const transcript = makeTranscript({ date: recentDate });
     mockFetchResponse({ data: { transcripts: [transcript] } });
     mockFetchResponse(CLAUDE_ANALYSIS);
 
@@ -208,7 +210,7 @@ describe('sync cursor', () => {
 
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining("VALUES ('fireflies'"),
-      expect.arrayContaining(['2026-03-27T12:00:00Z'])
+      expect.arrayContaining([recentDate])
     );
   });
 });

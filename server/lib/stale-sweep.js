@@ -100,6 +100,7 @@ function startSweep() {
   // Run once immediately to catch anything from a cold start
   runSweep();
   intervalId = setInterval(runSweep, SWEEP_INTERVAL_MS);
+  intervalId.unref();
   console.log(`stale-sweep: running every ${SWEEP_INTERVAL_MS / 1000}s`);
 }
 
