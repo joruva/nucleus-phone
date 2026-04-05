@@ -161,18 +161,19 @@ async function getSignalContacts({
   }
 
   // Batch: interaction count per company (single GROUP BY, not per-card)
+  // Use LOWER() to handle case differences between sources
   const companyNames = companies.map(c => c.company_name).filter(Boolean);
   const interactionCounts = {};
   if (companyNames.length > 0) {
     const icResult = await pool.query(
-      `SELECT company_name, COUNT(*)::int AS cnt
+      `SELECT LOWER(company_name) AS norm, COUNT(*)::int AS cnt
        FROM customer_interactions
-       WHERE company_name = ANY($1)
-       GROUP BY company_name`,
-      [companyNames],
+       WHERE LOWER(company_name) = ANY($1)
+       GROUP BY LOWER(company_name)`,
+      [companyNames.map(n => n.toLowerCase())],
     );
     for (const row of icResult.rows) {
-      interactionCounts[row.company_name] = row.cnt;
+      interactionCounts[row.norm] = row.cnt;
     }
   }
 
@@ -198,7 +199,7 @@ async function getSignalContacts({
       contact_count: companyContacts.length,
       phone_count: withPhone.length,
       no_phone_count: withoutPhone,
-      interaction_count: interactionCounts[company.company_name] || 0,
+      interaction_count: interactionCounts[company.company_name?.toLowerCase()] || 0,
     };
   });
 

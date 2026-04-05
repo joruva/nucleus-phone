@@ -64,8 +64,9 @@ function certBadge(expiryDate, standard) {
 function CompanyCard({ company, navigate, twilioStatus }) {
   const contract = formatCurrency(company.contract_total);
   const cert = certBadge(company.cert_expiry_date, company.cert_standard);
+  const certStr = formatExpiry(company.cert_expiry_date);
   const details = [
-    !cert && formatExpiry(company.cert_expiry_date) && `${company.cert_standard || 'Cert'} expires ${formatExpiry(company.cert_expiry_date)}`,
+    !cert && certStr && `${company.cert_standard || 'Cert'} expires ${certStr}`,
     contract && `${company.dod_flag ? 'DoD ' : ''}${contract}`,
     company.source_count > 1 && `${company.source_count} sources`,
   ].filter(Boolean);
@@ -86,7 +87,7 @@ function CompanyCard({ company, navigate, twilioStatus }) {
             <span className="text-[10px] font-bold text-blue-400 shrink-0" title="DoD contractor">🛡</span>
           )}
           {company.interaction_count > 0 && (
-            <span className="text-[10px] text-jv-muted shrink-0">{company.interaction_count} touch</span>
+            <span className="text-[10px] text-jv-muted shrink-0">{company.interaction_count} {company.interaction_count === 1 ? 'touch' : 'touches'}</span>
           )}
           <span className="text-jv-amber text-xs ml-auto shrink-0">⚡ {company.signal_score}</span>
         </div>
