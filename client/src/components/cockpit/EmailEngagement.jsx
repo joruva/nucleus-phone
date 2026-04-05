@@ -1,7 +1,9 @@
 import Sparkline from '../ui/Sparkline';
 
 function relativeTime(dateStr) {
-  const ms = Date.now() - new Date(dateStr).getTime();
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '';
+  const ms = Date.now() - d.getTime();
   const mins = Math.floor(ms / 60000);
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
@@ -29,16 +31,17 @@ export default function EmailEngagement({ emailEngagement }) {
     campaigns[name].push(e);
   }
 
-  // Sparkline data: engagement count per day (last 14 days)
+  // Sparkline data: engagement count per day (last 14 days), single-pass
   const now = Date.now();
-  const dayBuckets = Array.from({ length: 14 }, (_, i) => {
-    const dayStart = now - (13 - i) * 86400000;
-    const dayEnd = dayStart + 86400000;
-    return emailEngagement.filter(e => {
-      const t = new Date(e.created_at).getTime();
-      return t >= dayStart && t < dayEnd;
-    }).length;
-  });
+  const windowStart = now - 14 * 86400000;
+  const dayBuckets = new Array(14).fill(0);
+  for (const e of emailEngagement) {
+    const t = new Date(e.created_at).getTime();
+    if (t >= windowStart) {
+      const idx = Math.min(13, Math.floor((t - windowStart) / 86400000));
+      dayBuckets[idx]++;
+    }
+  }
   const hasActivity = dayBuckets.some(v => v > 0);
 
   return (

@@ -88,6 +88,17 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
   const [tab, setTab] = useState('briefing');
   const [userOverride, setUserOverride] = useState(false);
   const prevPhaseRef = useRef(callPhase);
+  const contactIdRef = useRef(d.identity?.hubspotContactId || d.identity?.phone);
+
+  // Reset override when contact changes (navigated to different contact)
+  const currentContactId = d.identity?.hubspotContactId || d.identity?.phone;
+  useEffect(() => {
+    if (currentContactId !== contactIdRef.current) {
+      contactIdRef.current = currentContactId;
+      setUserOverride(false);
+      setTab('briefing');
+    }
+  }, [currentContactId]);
 
   // Auto-switch tabs based on call phase — suppressed if user manually changed tab
   useEffect(() => {
@@ -149,22 +160,14 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
 
           {/* ── Tab 2: Company (company-level intelligence) ── */}
           <TabsContent value="company">
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4">
-              <div className="min-w-0">
-                <CompanyVernacular vernacular={d.companyVernacular} />
-                <CompanyIntel
-                  companyData={d.companyData}
-                  icpScore={d.icpScore}
-                  pipelineData={d.pipelineData}
-                  signalMetadata={d.signalMetadata}
-                  pbContactData={d.identity?.pbContactData}
-                />
-              </div>
-              <div className="min-w-0">
-                <InteractionTimeline interactionHistory={d.interactionHistory} priorCalls={d.priorCalls} />
-                <EmailEngagement emailEngagement={d.emailEngagement} />
-              </div>
-            </div>
+            <CompanyVernacular vernacular={d.companyVernacular} />
+            <CompanyIntel
+              companyData={d.companyData}
+              icpScore={d.icpScore}
+              pipelineData={d.pipelineData}
+              signalMetadata={d.signalMetadata}
+              pbContactData={d.identity?.pbContactData}
+            />
           </TabsContent>
 
           {/* ── Tab 3: Live (during-call tools) ── */}
