@@ -51,11 +51,21 @@ function formatExpiry(date) {
 
 // ── Company Card ────────────────────────────────────────────────────
 
+function certBadge(expiryDate, standard) {
+  if (!expiryDate) return null;
+  const expiry = new Date(expiryDate);
+  if (isNaN(expiry.getTime())) return null;
+  const months = Math.round((expiry - Date.now()) / (30 * 86400000));
+  if (months < 0) return { text: `${standard || 'Cert'} EXPIRED`, cls: 'bg-jv-red/20 text-jv-red' };
+  if (months <= 9) return { text: `${standard || 'Cert'} ${months}mo`, cls: 'bg-jv-amber/20 text-jv-amber' };
+  return null; // Not urgent enough to badge
+}
+
 function CompanyCard({ company, navigate, twilioStatus }) {
-  const certExpiry = formatExpiry(company.cert_expiry_date);
   const contract = formatCurrency(company.contract_total);
+  const cert = certBadge(company.cert_expiry_date, company.cert_standard);
   const details = [
-    certExpiry && `${company.cert_standard || 'Cert'} expires ${certExpiry}`,
+    !cert && formatExpiry(company.cert_expiry_date) && `${company.cert_standard || 'Cert'} expires ${formatExpiry(company.cert_expiry_date)}`,
     contract && `${company.dod_flag ? 'DoD ' : ''}${contract}`,
     company.source_count > 1 && `${company.source_count} sources`,
   ].filter(Boolean);
@@ -67,6 +77,17 @@ function CompanyCard({ company, navigate, twilioStatus }) {
         <div className="flex items-center gap-2">
           <TierBadge tier={company.signal_tier} />
           <span className="font-medium text-sm truncate">{company.company_name || company.domain}</span>
+          {cert && (
+            <span className={`${cert.cls} px-1.5 py-0.5 rounded text-[10px] font-bold shrink-0`}>
+              {cert.text}
+            </span>
+          )}
+          {company.dod_flag && (
+            <span className="text-[10px] font-bold text-blue-400 shrink-0" title="DoD contractor">🛡</span>
+          )}
+          {company.interaction_count > 0 && (
+            <span className="text-[10px] text-jv-muted shrink-0">{company.interaction_count} touch</span>
+          )}
           <span className="text-jv-amber text-xs ml-auto shrink-0">⚡ {company.signal_score}</span>
         </div>
         {details.length > 0 && (

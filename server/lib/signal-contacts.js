@@ -160,6 +160,22 @@ async function getSignalContacts({
     });
   }
 
+  // Batch: interaction count per company (single GROUP BY, not per-card)
+  const companyNames = companies.map(c => c.company_name).filter(Boolean);
+  const interactionCounts = {};
+  if (companyNames.length > 0) {
+    const icResult = await pool.query(
+      `SELECT company_name, COUNT(*)::int AS cnt
+       FROM customer_interactions
+       WHERE company_name = ANY($1)
+       GROUP BY company_name`,
+      [companyNames],
+    );
+    for (const row of icResult.rows) {
+      interactionCounts[row.company_name] = row.cnt;
+    }
+  }
+
   // Assemble result — companies with nested contacts
   const result = companies.map(company => {
     const norm = companyNorms.get(company.domain);
@@ -182,6 +198,7 @@ async function getSignalContacts({
       contact_count: companyContacts.length,
       phone_count: withPhone.length,
       no_phone_count: withoutPhone,
+      interaction_count: interactionCounts[company.company_name] || 0,
     };
   });
 
