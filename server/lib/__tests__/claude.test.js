@@ -77,7 +77,7 @@ describe('generateRapportIntel', () => {
   test('clearCache removes specific key', async () => {
     mockFetchResponse(CLAUDE_RESPONSE);
     await generateRapportIntel(CONTACT);
-    clearCache('hs-1');
+    clearCache('hs-1_v2');
     // Next call should hit API again
     mockFetchResponse(CLAUDE_RESPONSE);
     await generateRapportIntel(CONTACT);
@@ -145,6 +145,54 @@ describe('generateRapportIntel', () => {
     expect(result.fallback).toBe(true);
     expect(result.opening_line).toContain('Alex');
     expect(result.rapport_starters.length).toBeGreaterThan(0);
+  });
+
+  test('fallback with full vernacular produces rich briefing', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    const richContact = {
+      hubspotContactId: 'hs-rich',
+      name: 'Daniel Franzese',
+      company: 'HABCO Industries',
+      title: 'Vice President and General Manager',
+      pbContactData: {
+        summary: 'Aerospace and aviation sector professional with contract negotiation expertise',
+        industry: 'Aviation and Aerospace Component Manufacturing',
+        location: 'North Dartmouth, Massachusetts',
+        durationInRole: '9 months in role',
+        pastExperience: { company: 'Esterline Advanced Sensors', title: 'Director, Sales and Operations', duration: '8 months' },
+      },
+      signalMetadata: {
+        signal_tier: 'targeted',
+        signal_score: 9,
+        contract_total: 126480,
+        dod_flag: true,
+      },
+      companyVernacular: {
+        equipment: ['piston compressor, 25HP, 7 years old'],
+        painPoints: ['moisture', 'short-cycling'],
+        competitorsMentioned: ['Atlas Copco'],
+        leadershipStrategy: 'Operational simplification and growth',
+      },
+      icpScore: { geo_city: 'GLASTONBURY', geo_state: 'CT', employee_range: '50-100' },
+      emailEngagement: [
+        { event_type: 'open', campaign_name: 'CNC Air Quality Series' },
+        { event_type: 'click', campaign_name: 'CNC Air Quality Series' },
+      ],
+    };
+    const result = await generateRapportIntel(richContact);
+    expect(result.fallback).toBe(true);
+    // Should have 4+ starters (signal + career + strategy)
+    expect(result.rapport_starters.length).toBeGreaterThanOrEqual(4);
+    // Should have 4+ nuggets (industry + location + equipment + pain + email)
+    expect(result.intel_nuggets.length).toBeGreaterThanOrEqual(4);
+    // Should have product recommendations
+    expect(result.product_reference.length).toBeGreaterThanOrEqual(2);
+    // Should have aerospace products since industry is aviation
+    expect(result.product_reference.some(p => p.includes('JDD-40'))).toBe(true);
+    // adapted_script should be a real paragraph, not empty
+    expect(result.adapted_script.length).toBeGreaterThan(50);
+    // watch_outs should include competitor
+    expect(result.watch_outs.some(w => w.includes('Atlas Copco'))).toBe(true);
   });
 
   test('clearCache without key clears all', async () => {

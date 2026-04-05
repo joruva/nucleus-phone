@@ -6,7 +6,19 @@
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+const CACHE_VERSION = 2; // Bump when prompt or data shape changes
 const FETCH_TIMEOUT = 6000; // 6 seconds
+
+// Compact product catalog for Claude prompt — confirmed-pricing SKUs only.
+// Source: compressor-catalog.js + sizing-engine.js (read-only, not imported to avoid coupling)
+const PRODUCT_CATALOG = `Joruva Industrial products (confirmed pricing):
+Compressors: JRS-7.5E 7.5HP 28CFM $7,495 | JRS-10E 10HP 38CFM $9,495 | JRS-30 30HP 125CFM $19,500 (direct)
+Dryers (refrigerated): JRD-30 $2,195 | JRD-40 $2,495 | JRD-60 $2,895 | JRD-80 $3,195 | JRD-100 $3,595
+Dryers (desiccant, -60°F, molecular sieve, wall-mount): JDD-40 40CFM $7,495 | JDD-80 80CFM $11,895
+Filters: JPF-70 particulate 1µm $399 | JPF-130 $499 | JCF-70 coalescing 0.01µm $349 | JCF-130 $449
+OWS (oil-water separator): OWS75 $234 | OWS150 $1,092
+Larger systems (30HP+): direct sale, custom quote required.
+For AS9100/aerospace: recommend desiccant dryer + coalescing filter. General mfg: refrigerated dryer.`;
 
 // In-memory cache: Map<string, { data, expiresAt }>
 const cache = new Map();
@@ -22,32 +34,46 @@ setInterval(() => {
 
 const SYSTEM_PROMPT = `You are a rapport-first intelligence analyst for Joruva Industrial, a compressed air systems distributor. Your job is to prepare a sales caller with a pre-call briefing.
 
-Given contact data (name, title, company, interaction history, pipeline data, PB profile), produce a JSON object with these fields:
+Given contact data, produce a JSON object with these fields:
 
-- rapport_starters: Array of 2-3 conversation openers based on REAL data (career history, headline, company, location, tenure, past interactions). NEVER fabricate facts. If data is sparse, use what's available.
-- intel_nuggets: Array of 2-4 buying signals, objection prep points, or compliance notes derived from interaction history and pipeline data.
-- opening_line: A natural, warm opening line for the call. Use their first name.
-- adapted_script: 2-3 sentences tailoring the standard pitch to this specific contact's industry/role/history.
-- watch_outs: Array of 0-2 things to avoid (e.g., competitor mentions, past complaints, sensitive topics).
-- product_reference: Relevant product lines based on their history/industry.
+- rapport_starters: Array of 4-5 conversation openers based on REAL data. Use career history, tenure, past experience, company context, location, cert status, industry signals. NEVER fabricate facts.
+- intel_nuggets: Array of 4-5 buying signals, equipment context, compliance notes, or competitive positioning points.
+- opening_line: A natural, warm opening line referencing something specific about their company or role. Use their first name.
+- adapted_script: A 3-5 sentence tactical paragraph: what to lead with, what angle works for this title/industry, which product to recommend first and why, what NOT to do. Be specific and tactical, not generic.
+- watch_outs: Array of 1-3 things to avoid (competitor mentions, past complaints, sensitivity).
+- product_reference: Array of 2-5 specific products from the catalog below, formatted as "MODEL — specs, $price. Use case." Match products to the contact's industry, company size, and compliance requirements.
 
-When signal metadata is present (signal_tier, cert_expiry, contract_total, dod_flag, cert_body, signal_sources), weave it into the opening_line and intel_nuggets:
-- For cert expiry within 9 months: mention upcoming recertification as a conversation hook (e.g., "your AS9100 is up for renewal"). If cert_body is known (e.g., "NQA", "BSI"), mention it naturally — "I know NQA audits can be thorough..."
-- For DoD/government contracts: reference compliance or mil-spec requirements naturally. Use contract_total to gauge scale.
-- For SPEAR-tier contacts: the opener should be direct and high-value, referencing the specific signal that flagged them
-- For TARGETED-tier: reference their industry fit
-- When signal_sources is available, use the source context (e.g., "SAM.gov" → government procurement, "FPDS" → defense contracts) to inform your talking points
-- Adapt talking points to the contact's TITLE: VP Ops → operational efficiency; QA Director → compliance and audit readiness; Purchasing → cost optimization; Maintenance → equipment reliability and downtime
-- When pbContactData includes industry or location, use them to ground recommendations in the contact's geography and vertical
-- NEVER mention tiers, scores, or signal data by name — use the underlying facts naturally.
+${PRODUCT_CATALOG}
+
+SIGNAL METADATA RULES:
+- Cert expiry within 9 months: mention recertification as a hook. If cert_body known, reference it naturally.
+- DoD/government contracts: reference compliance or mil-spec requirements. Use contract_total for scale.
+- SPEAR-tier: direct, high-value opener referencing the specific signal.
+- TARGETED-tier: reference industry fit.
+- Adapt to TITLE: VP Ops → uptime; QA → compliance; Purchasing → cost; Maintenance → reliability.
+- NEVER mention tiers, scores, or signal data by name.
+
+COMPANY VERNACULAR RULES:
+- When companyVernacular includes equipment, pain points, or competitors: reference them in intel_nuggets. Equipment context is gold — "I see you're running a 25HP piston" is 10x better than generic pitch.
+- When tenKInsights or leadershipStrategy is present: weave business strategy into rapport_starters naturally. "I know Parker is focused on the Win Strategy 3.0 simplification initiative" shows research.
+- When complianceContext has violations: reference compliance pressure without being accusatory.
+- When capitalEquipment has procurement data: reference recent equipment purchases to gauge buying patterns.
+
+EMAIL ENGAGEMENT RULES:
+- When emailEngagement shows opens/clicks: reference interest indirectly ("I know you've been looking at our content on air quality") — never say "I see you opened our email."
+
+CAREER CONTEXT RULES:
+- When pastExperience is present: use career transitions for rapport ("Your background at Esterline must give you a strong perspective on...").
+- When durationInRole is short (<12 months): note they may be evaluating vendors and establishing relationships.
 
 Respond with ONLY valid JSON, no markdown fences.`;
 
 function cacheKey(contactData) {
-  return contactData.hubspotContactId
+  const id = contactData.hubspotContactId
     || contactData.phone
     || contactData.email
     || 'unknown';
+  return `${id}_v${CACHE_VERSION}`;
 }
 
 function getCached(key) {
@@ -171,18 +197,96 @@ function buildFallback(contactData) {
   if (pb?.industry) nuggets.push(`Industry: ${pb.industry}`);
   if (pb?.location) nuggets.push(`Location: ${pb.location}`);
 
+  // Career context from PB data
+  if (pb?.durationInRole) {
+    const months = parseInt(pb.durationInRole, 10);
+    const tenure = months && months <= 12
+      ? 'relatively new — may be evaluating vendors'
+      : 'established — knows the operation well';
+    starters.push(`${pb.durationInRole} in current role — ${tenure}`);
+  }
+  if (pb?.pastExperience) {
+    const past = typeof pb.pastExperience === 'object'
+      ? `Previously ${pb.pastExperience.title} at ${pb.pastExperience.company}${pb.pastExperience.duration ? ` (${pb.pastExperience.duration})` : ''}`
+      : `Previous: ${pb.pastExperience}`;
+    starters.push(past);
+  }
+
+  // Company vernacular context
+  const vern = contactData.companyVernacular;
+  if (vern?.equipment?.length) {
+    nuggets.push(`Equipment: ${vern.equipment.slice(0, 2).join('; ')}`);
+  }
+  if (vern?.painPoints?.length) {
+    nuggets.push(`Known pain: ${vern.painPoints.slice(0, 3).join(', ')}`);
+  }
+  if (vern?.competitorsMentioned?.length) {
+    nuggets.push(`Competitors mentioned: ${vern.competitorsMentioned.join(', ')}`);
+  }
+  if (vern?.leadershipStrategy) {
+    starters.push(`Company strategy: ${vern.leadershipStrategy}`);
+  }
+
+  // Lead reservoir enrichment
+  const icp = contactData.icpScore;
+  if (icp?.industry_description && !pb?.industry) nuggets.push(`Industry: ${icp.industry_description}`);
+  if (icp?.employee_range) nuggets.push(`Company size: ${icp.employee_range} employees`);
+  if (icp?.geo_city && icp?.geo_state && !pb?.location) {
+    nuggets.push(`Location: ${icp.geo_city}, ${icp.geo_state}`);
+  }
+
+  // Email engagement
+  const engagement = contactData.emailEngagement;
+  if (engagement?.length) {
+    const opens = engagement.filter(e => e.event_type === 'open').length;
+    const clicks = engagement.filter(e => e.event_type === 'click').length;
+    const campaign = engagement[0]?.campaign_name;
+    let engStr = `Email activity: ${opens} opens, ${clicks} clicks`;
+    if (campaign) engStr += ` (${campaign})`;
+    nuggets.push(engStr);
+  }
+
+  // Product recommendations based on industry/cert
+  const products = [];
+  const isAerospace = signal?.cert_standard?.includes('AS9100')
+    || pb?.industry?.toLowerCase().includes('aerospace')
+    || pb?.industry?.toLowerCase().includes('aviation');
+
+  if (isAerospace) {
+    products.push('JRS-10E — 10HP, 38 CFM @ 150 PSI, $9,495. Enclosed rotary screw.');
+    products.push('JDD-40 — Desiccant dryer, -60°F dewpoint, 40 CFM, $7,495. Molecular sieve, wall-mount. For AS9100.');
+    products.push('JCF-70 — Coalescing filter, 0.01 micron, $349. Oil-free air for aerospace.');
+  } else {
+    products.push('JRS-10E — 10HP, 38 CFM @ 150 PSI, $9,495. Enclosed rotary screw.');
+    products.push('JRD-40 — Refrigerated dryer, 40 CFM, $2,495. General manufacturing.');
+    products.push('JPF-70 — Particulate pre-filter, 1 micron, $399. Upstream of dryer.');
+  }
+
+  // Adapted script — tactical paragraph
+  let script = '';
+  if (angle && vern?.painPoints?.length) {
+    script = `Lead with ${angle.topic} — they have known pain (${vern.painPoints[0]}). Frame Joruva's value around ${angle.hook}. `;
+    script += isAerospace
+      ? 'Recommend desiccant dryer + coalescing filter for AS9100 air quality compliance.'
+      : 'Start with the JRS-10E rotary screw and JRD-40 refrigerated dryer for general manufacturing.';
+  } else if (angle) {
+    script = `Focus on ${angle.topic}. Frame Joruva's value around ${angle.hook}.`;
+    if (pb?.summary) script += ` Context: ${pb.summary.substring(0, 120)}`;
+  } else if (pb?.summary) {
+    script = `This contact's background: ${pb.summary.substring(0, 150)}. Tailor your approach accordingly.`;
+  }
+
   return {
     fallback: true,
-    rapport_starters: starters.slice(0, 3),
-    intel_nuggets: nuggets.slice(0, 4),
+    rapport_starters: starters.slice(0, 5),
+    intel_nuggets: nuggets.slice(0, 5),
     opening_line: opener,
-    adapted_script: angle
-      ? `Focus on ${angle.topic}. Frame Joruva's value around ${angle.hook}.`
-      : '',
-    watch_outs: signal?.dod_flag
-      ? ['Avoid discussing specific contract details — let them bring it up']
-      : [],
-    product_reference: [],
+    adapted_script: script,
+    watch_outs: [
+      ...(signal?.dod_flag ? ['Avoid discussing specific contract details — let them bring it up'] : []),
+      ...(vern?.competitorsMentioned?.length ? [`They know ${vern.competitorsMentioned[0]} — be ready with differentiators`] : []),
+    ].slice(0, 3),
+    product_reference: products,
   };
 }
 
@@ -192,25 +296,26 @@ function buildFallback(contactData) {
  */
 function trimForClaude(contactData) {
   const history = contactData.interactionHistory;
+  const vern = contactData.companyVernacular;
+
+  // Truncate long HubSpot text fields to stay within ~1,600 token user message budget
+  const truncate = (s, max) => s ? String(s).substring(0, max) : null;
+
   return {
     name: contactData.name,
-    email: contactData.email,
-    phone: contactData.phone,
     company: contactData.company,
     title: contactData.title,
-    linkedinUrl: contactData.linkedinUrl,
-    fitScore: contactData.fitScore,
-    fitReason: contactData.fitReason,
-    persona: contactData.persona,
-    pbContactData: contactData.pbContactData,
-    companyData: contactData.companyData,
+    pbContactData: contactData.pbContactData ?? null,
     icpScore: contactData.icpScore ? {
-      fit_score: contactData.icpScore.fit_score,
-      fit_reason: contactData.icpScore.fit_reason,
-      persona: contactData.icpScore.persona,
+      icp_score: contactData.icpScore.icp_score ?? null,
+      prequalify_class: contactData.icpScore.prequalify_class ?? null,
+      industry_description: contactData.icpScore.industry_description ?? null,
+      employee_range: contactData.icpScore.employee_range ?? null,
+      geo_city: contactData.icpScore.geo_city ?? null,
+      geo_state: contactData.icpScore.geo_state ?? null,
     } : null,
     interactionCount: history?.interactionCount || 0,
-    lastInteractionSummary: history?.lastInteractionSummary || null,
+    lastInteractionSummary: history?.lastInteractionSummary ?? null,
     productsDiscussed: history?.productsDiscussed || [],
     recentInteractions: (history?.interactions || []).slice(0, 5).map(i => ({
       channel: i.channel, summary: i.summary, disposition: i.disposition,
@@ -220,7 +325,7 @@ function trimForClaude(contactData) {
       disposition: c.disposition, qualification: c.qualification, notes: c.notes,
     })),
     emailEngagement: (contactData.emailEngagement || []).slice(0, 5).map(e => ({
-      event_type: e.event_type, campaign_name: e.campaign_name,
+      event_type: e.event_type, campaign_name: e.campaign_name ?? null,
     })),
     signalMetadata: contactData.signalMetadata ? {
       signal_tier: contactData.signalMetadata.signal_tier,
@@ -234,6 +339,22 @@ function trimForClaude(contactData) {
       signal_sources: Array.isArray(contactData.signalMetadata.signal_sources)
         ? contactData.signalMetadata.signal_sources : null,
     } : null,
+    // Company vernacular (truncated for prompt budget)
+    companyVernacular: vern ? {
+      equipment: (vern.equipment || []).slice(0, 5),
+      painPoints: (vern.painPoints || []).slice(0, 5),
+      productsDiscussed: (vern.productsDiscussed || []).slice(0, 5),
+      competitorsMentioned: (vern.competitorsMentioned || []).slice(0, 3),
+      certContext: vern.certContext ?? null,
+      hubspotVernacular: truncate(vern.hubspotVernacular, 500),
+      tenKInsights: truncate(vern.tenKInsights, 500),
+      leadershipStrategy: vern.leadershipStrategy ?? null,
+      complianceContext: truncate(vern.complianceContext, 300),
+      capitalEquipment: truncate(vern.capitalEquipment, 300),
+    } : null,
+    // Pipeline context
+    pipelineSegment: contactData.pipelineData?.[0]?.segment ?? null,
+    discoverySource: contactData.pipelineData?.[0]?.discovery_source ?? null,
   };
 }
 
