@@ -95,11 +95,11 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
         </div>
       </div>
 
-      {/* Bridge layout: 3-column — fills remaining viewport height */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3 flex-1">
+      {/* Bridge layout: 3-column — fills remaining viewport, no scroll */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3" style={{ height: 'calc(100vh - 180px)' }}>
 
-        {/* Left — Rapport + Career + Discovery + Intel */}
-        <div className="min-w-0 flex flex-col gap-0">
+        {/* Left — Rapport + Career + Discovery + Intel (scrollable) */}
+        <div className="min-w-0 flex flex-col gap-0 overflow-y-auto">
           <ScoreSection label="Rapport" weight="20%" color="amber">
             <RapportOpener openingLine={d.rapport?.opening_line} />
             <RapportTags tags={d.rapport?.rapport_starters} />
@@ -128,8 +128,8 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
           </div>
         </div>
 
-        {/* Right — Objections + Qual Script + Product + Timeline */}
-        <div className="min-w-0 flex flex-col gap-0">
+        {/* Right — Objections + Qual Script + Product + Timeline (scrollable) */}
+        <div className="min-w-0 flex flex-col gap-0 overflow-y-auto">
           <ScoreSection label="Objection Handling" weight="25%" color="orange">
             <IntelNuggets watchOuts={d.rapport?.watch_outs} />
           </ScoreSection>
