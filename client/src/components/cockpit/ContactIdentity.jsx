@@ -1,5 +1,10 @@
 import Tooltip from '../ui/Tooltip';
 
+function fmtPast(p) {
+  if (!p) return null;
+  return typeof p === 'object' ? `${p.title} at ${p.company}` : p;
+}
+
 export default function ContactIdentity({ identity }) {
   const name = identity?.name || 'Unknown Contact';
   const title = identity?.title || '';
@@ -45,16 +50,9 @@ export default function ContactIdentity({ identity }) {
           <span className="text-xs text-cp-text-muted leading-tight block mt-0.5">
             {identity.pbContactData.durationInRole}
             {identity.pbContactData.pastExperience && (
-              <Tooltip content={
-                typeof identity.pbContactData.pastExperience === 'object'
-                  ? `${identity.pbContactData.pastExperience.title} at ${identity.pbContactData.pastExperience.company}${identity.pbContactData.pastExperience.duration ? ` (${identity.pbContactData.pastExperience.duration})` : ''}`
-                  : identity.pbContactData.pastExperience
-              }>
+              <Tooltip content={`${fmtPast(identity.pbContactData.pastExperience)}${identity.pbContactData.pastExperience?.duration ? ` (${identity.pbContactData.pastExperience.duration})` : ''}`}>
                 <span className="cursor-help">
-                  {' · Prev: '}
-                  {typeof identity.pbContactData.pastExperience === 'object'
-                    ? `${identity.pbContactData.pastExperience.title} at ${identity.pbContactData.pastExperience.company}`
-                    : identity.pbContactData.pastExperience}
+                  {' · Prev: '}{fmtPast(identity.pbContactData.pastExperience)}
                 </span>
               </Tooltip>
             )}

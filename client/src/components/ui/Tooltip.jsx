@@ -18,6 +18,7 @@ export default function Tooltip({ children, content, side = 'top' }) {
             background: 'var(--cockpit-card, #0F0D29)',
             color: 'var(--cockpit-text, #F5F5F4)',
             border: '1px solid var(--cockpit-card-border, rgba(49,46,129,0.5))',
+            whiteSpace: 'pre-line',
           }}
         >
           {content}
