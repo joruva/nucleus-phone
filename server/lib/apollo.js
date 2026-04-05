@@ -99,8 +99,7 @@ async function revealPerson(apolloId, requestPhone = true) {
     first_name: p.first_name || null,
     last_name: p.last_name || null,
     title: p.title || null,
-    // Phone arrives async via webhook — will be null in this response
-    phone: p.phone_numbers?.[0]?.sanitized_number || null,
+    phone: p.sanitized_phone || p.primary_phone?.number || p.phone_numbers?.[0]?.sanitized_number || null,
     email: p.email || null,
     linkedin_url: p.linkedin_url || null,
   };

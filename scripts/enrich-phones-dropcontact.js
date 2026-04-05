@@ -103,11 +103,14 @@ async function run() {
        WHERE pb.phone IS NULL
          AND pb.first_name IS NOT NULL AND pb.last_name IS NOT NULL
          AND pb.company_name IS NOT NULL
-         AND EXISTS (
-           SELECT 1 FROM v35_signal_metadata sm
-           JOIN v35_lead_reservoir lr ON lr.domain = sm.domain
-           WHERE LOWER(REGEXP_REPLACE(lr.company_name, ',?\\s*(Inc\\.?|LLC|Corp\\.?|Ltd\\.?|Co\\.?|LP|L\\.P\\.?)\\s*$', '', 'i'))
-                 = pb.company_name_norm
+         AND (
+           pb.domain IN (SELECT domain FROM v35_signal_metadata WHERE signal_tier IN ('spear', 'targeted'))
+           OR EXISTS (
+             SELECT 1 FROM v35_signal_metadata sm
+             JOIN v35_lead_reservoir lr ON lr.domain = sm.domain
+             WHERE LOWER(REGEXP_REPLACE(lr.company_name, ',?\\s*(Inc\\.?|LLC|Corp\\.?|Ltd\\.?|Co\\.?|LP|L\\.P\\.?)\\s*$', '', 'i'))
+                   = pb.company_name_norm
+           )
          )
        ORDER BY pb.id
        LIMIT $1`;
