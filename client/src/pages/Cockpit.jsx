@@ -54,7 +54,7 @@ const SCORE_COLORS = {
   purple: { bg: 'var(--cockpit-purple-50)', text: 'var(--cockpit-purple-500)', border: 'var(--cockpit-purple-border)' },
 };
 
-function ScoreSection({ label, weight, color, children }) {
+function ScoreSection({ label, weight, color, isPractice, children }) {
   const c = SCORE_COLORS[color] || SCORE_COLORS.blue;
   return (
     <div className="mb-4">
@@ -65,7 +65,7 @@ function ScoreSection({ label, weight, color, children }) {
         >
           {label}
         </span>
-        <span className="cp-detail font-semibold" style={{ color: c.text }}>{weight}</span>
+        {isPractice && <span className="cp-detail font-semibold" style={{ color: c.text }}>{weight}</span>}
         <div className="flex-1 h-px" style={{ background: c.border }} />
       </div>
       {children}
@@ -253,12 +253,12 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
 
                   {/* Left — Rapport + Career + Discovery + Intel */}
                   <div className="min-w-0 flex flex-col gap-0">
-                    <ScoreSection label="Rapport" weight="20%" color="amber">
+                    <ScoreSection label="Rapport" weight="20%" color="amber" isPractice>
                       <RapportOpener openingLine={d.rapport?.opening_line} />
                       <RapportTags tags={d.rapport?.rapport_starters} />
                     </ScoreSection>
                     <CareerContext pbContactData={d.identity?.pbContactData} />
-                    <ScoreSection label="Discovery" weight="25%" color="blue">
+                    <ScoreSection label="Discovery" weight="25%" color="blue" isPractice>
                       <IntelNuggets nuggets={d.rapport?.intel_nuggets} />
                     </ScoreSection>
                   </div>
@@ -272,11 +272,11 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
 
                   {/* Right — Objections + Qual Script + Product */}
                   <div className="min-w-0 flex flex-col gap-0">
-                    <ScoreSection label="Objection Handling" weight="25%" color="orange">
+                    <ScoreSection label="Objection Handling" weight="25%" color="orange" isPractice>
                       <IntelNuggets watchOuts={d.rapport?.watch_outs} />
                     </ScoreSection>
                     <QualScript adaptedScript={d.rapport?.adapted_script} />
-                    <ScoreSection label="Product & Close" weight="30%" color="green">
+                    <ScoreSection label="Product & Close" weight="30%" color="green" isPractice>
                       <ProductReference productReference={d.rapport?.product_reference} />
                     </ScoreSection>
                   </div>

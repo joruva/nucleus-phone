@@ -182,6 +182,20 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
 
     const rapport = await generateRapportIntel(assembled);
 
+    // Ensure watch_outs is never empty — reps need objection prep
+    if (!rapport.watch_outs?.length) {
+      const watchOuts = [];
+      if (signalMetadata?.dod_flag)
+        watchOuts.push('DoD contractor — avoid discussing specific contract details, let them bring it up');
+      if (companyVernacular?.competitorsMentioned?.length)
+        watchOuts.push(`They know ${companyVernacular.competitorsMentioned[0]} — be ready with differentiators`);
+      if (identity.title?.toLowerCase().includes('purchas') || identity.title?.toLowerCase().includes('procurement'))
+        watchOuts.push('Purchasing role — expect price objections, lead with total cost of ownership');
+      if (!watchOuts.length)
+        watchOuts.push('First contact — listen before pitching, ask about their current setup');
+      rapport.watch_outs = watchOuts;
+    }
+
     // Step 5: Return full cockpit payload
     res.json({
       identity,
