@@ -95,8 +95,8 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
         </div>
       </div>
 
-      {/* Bridge layout: 3-column — matches practice mode */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3">
+      {/* Bridge layout: 3-column — fills remaining viewport height */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3 flex-1">
 
         {/* Left — Rapport + Career + Discovery + Intel */}
         <div className="min-w-0 flex flex-col gap-0">
@@ -111,19 +111,21 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
           <EmailEngagement emailEngagement={d.emailEngagement} />
         </div>
 
-        {/* CENTER — Viewscreen */}
+        {/* CENTER — Viewscreen fills height, Company Intel anchored to bottom */}
         <div className="min-w-0 flex flex-col">
           <div className="cockpit-viewscreen">
             <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} contact={d.identity} callId={liveCallId} isPractice={false} />
           </div>
-          <CompanyVernacular vernacular={d.companyVernacular} />
-          <CompanyIntel
-            companyData={d.companyData}
-            icpScore={d.icpScore}
-            pipelineData={d.pipelineData}
-            signalMetadata={d.signalMetadata}
-            pbContactData={d.identity?.pbContactData}
-          />
+          <div className="mt-auto">
+            <CompanyVernacular vernacular={d.companyVernacular} />
+            <CompanyIntel
+              companyData={d.companyData}
+              icpScore={d.icpScore}
+              pipelineData={d.pipelineData}
+              signalMetadata={d.signalMetadata}
+              pbContactData={d.identity?.pbContactData}
+            />
+          </div>
         </div>
 
         {/* Right — Objections + Qual Script + Product + Timeline */}
