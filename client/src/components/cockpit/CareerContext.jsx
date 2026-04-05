@@ -55,7 +55,7 @@ export default function CareerContext({ pbContactData }) {
 
         {/* LinkedIn summary */}
         {summary && (
-          <p className="text-xs text-cp-text-muted leading-relaxed line-clamp-3">
+          <p className="cp-detail leading-relaxed">
             {summary}
           </p>
         )}
