@@ -7,6 +7,7 @@ const { getCompany } = require('../lib/hubspot');
 const { generateRapportIntel, clearCache } = require('../lib/claude');
 const { buildVernacular } = require('../lib/company-vernacular');
 const { normalizePhone } = require('../lib/phone');
+const { normalizeCompanyName } = require('../lib/company-normalizer');
 const { TEST_COCKPIT_DATA } = require('../lib/test-cockpit-data');
 const SIM_MIKE_GARZA = require('../config/sim-contacts/mike-garza.json');
 const SIM_MIKE_GARZA_BY_DIFFICULTY = {
@@ -75,7 +76,9 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
           ).then(r => r.rows).catch(() => [])
         : Promise.resolve([]),
 
-      // 3: ICP score + signal metadata (single query via LEFT JOIN, avoids duplicate reservoir lookup)
+      // 3: ICP score + signal metadata (single query via LEFT JOIN)
+      // Use normalized company name (strips LLC, Inc, Corp, etc.) to match
+      // across sources that store different suffix variants.
       identity.company
         ? pool.query(
             `SELECT lr.domain,
@@ -89,9 +92,9 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
                     sm.contract_total, sm.dod_flag, sm.signal_sources
              FROM v35_lead_reservoir lr
              LEFT JOIN v35_signal_metadata sm ON sm.domain = lr.domain
-             WHERE LOWER(lr.company_name) = LOWER($1)
+             WHERE LOWER(lr.company_name) LIKE $1 || '%'
              LIMIT 1`,
-            [identity.company]
+            [normalizeCompanyName(identity.company)]
           ).then(r => r.rows[0] || null).catch(() => null)
         : Promise.resolve(null),
 
