@@ -165,7 +165,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
   const [loading, setLoading] = useState(true);
   const [tier, setTier] = useState('');
   const [state, setState] = useState('');
-  const [contactFilter, setContactFilter] = useState('all');
+  const [contactFilter, setContactFilter] = useState('has_phone');
   const [awarenessOpen, setAwarenessOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -194,9 +194,11 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     return () => clearInterval(interval);
   }, []);
 
-  const filtered = contactFilter === 'has_contacts'
-    ? companies.filter(c => c.contact_count > 0)
-    : companies;
+  const filtered = contactFilter === 'has_phone'
+    ? companies.filter(c => c.contacts?.some(ct => ct.phone))
+    : contactFilter === 'has_contacts'
+      ? companies.filter(c => c.contact_count > 0)
+      : companies;
   const spearTargeted = filtered.filter(c => c.signal_tier !== 'awareness');
   const awareness = filtered.filter(c => c.signal_tier === 'awareness');
 
@@ -230,8 +232,9 @@ export default function Contacts({ identity, callState, twilioStatus }) {
           onChange={e => setContactFilter(e.target.value)}
           className="px-2 py-1 rounded-lg bg-jv-card border border-jv-border text-xs text-jv-muted"
         >
+          <option value="has_phone">With phone numbers</option>
+          <option value="has_contacts">With any contacts</option>
           <option value="all">All companies</option>
-          <option value="has_contacts">With contacts found</option>
         </select>
       </div>
 
