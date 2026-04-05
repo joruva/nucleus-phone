@@ -1,7 +1,7 @@
 /**
  * lib/identity-resolver.js — Phone/email/ID → unified ResolvedIdentity.
  *
- * Steps 1-2 (free): HubSpot + PB contacts.
+ * Steps 1-2 (free): HubSpot + PB contacts + URL slug name resolution.
  * Steps 3-4 (credit-gated): Apollo + Dropcontact.
  */
 
@@ -11,6 +11,43 @@ const { normalizeCompanyName } = require('./company-normalizer');
 const { findContactByPhone, getContact, searchContacts } = require('./hubspot');
 const { matchPerson } = require('./apollo');
 const { reverseSearch } = require('./dropcontact');
+
+/**
+ * Extract full name from LinkedIn URL slug. Free, instant, no API calls.
+ * "linkedin.com/in/ashley-parker8190" + firstName "Ashley" → { firstName: "Ashley", lastName: "Parker" }
+ */
+function resolveNameFromSlug(url, firstName) {
+  if (!url || !firstName) return null;
+  const slug = url.match(/linkedin\.com\/in\/([^/?]+)/)?.[1];
+  if (!slug) return null;
+
+  const clean = slug
+    .replace(/-[a-f0-9]{6,}$/, '')
+    .replace(/-?\d+$/, '')
+    .replace(/-(mba|phd|pe|cpa|pmp|cfa|csm|ehs|mfg-leader|plant-manager|strategic-advisor|engineering|mgr|aeromgr)$/i, '');
+
+  const firstLower = firstName.toLowerCase();
+
+  // Hyphenated: "ashley-parker" → Ashley Parker
+  const parts = clean.split('-');
+  if (parts.length >= 2 && parts[0].toLowerCase() === firstLower) {
+    const last = parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+    if (last.length >= 2) return { firstName: cap(parts[0]), lastName: last };
+  }
+
+  // Concatenated: "ashleyparker" → Ashley Parker
+  const lower = clean.toLowerCase();
+  if (lower.startsWith(firstLower) && lower.length > firstLower.length + 1) {
+    const rest = clean.slice(firstLower.length);
+    if (rest.length >= 3 && rest.length <= 20 && /^[a-z]+$/i.test(rest)) {
+      return { firstName: cap(firstLower), lastName: cap(rest) };
+    }
+  }
+
+  return null;
+}
+
+function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
 
 /**
  * Resolve an identifier (phone, email, or HubSpot contact ID) into a
@@ -71,10 +108,23 @@ async function resolve(identifier) {
     }
   }
 
-  // Step 3: Apollo people match (credit-gated)
-  // Trigger if: no LinkedIn URL, OR last name is truncated (e.g., "P." from Sales Navigator)
+  // Step 2c: If last name is truncated ("P." from Sales Navigator), try URL slug first (free)
   const lastNameParts = (name || '').split(/\s+/).slice(1);
   const lastNameTruncated = lastNameParts.length > 0 && /^\w\.$/.test(lastNameParts[lastNameParts.length - 1]);
+  if (lastNameTruncated && name) {
+    const resolved = resolveNameFromSlug(pbData?.linkedinUrl || pbData?.defaultProfileUrl, name.split(/\s+/)[0]);
+    if (resolved) {
+      name = `${resolved.firstName} ${resolved.lastName}`;
+      // Persist the fix back to PB contacts so we don't re-resolve every load
+      pool.query(
+        `UPDATE v35_pb_contacts SET full_name = $1, first_name = $2, last_name = $3
+         WHERE LOWER(full_name) = LOWER($4) AND company_name_norm = $5`,
+        [name, resolved.firstName, resolved.lastName, `${resolved.firstName} ${lastNameParts[0]}`, normalizeCompanyName(company)]
+      ).catch(() => {}); // fire-and-forget
+    }
+  }
+
+  // Step 3: Apollo people match (credit-gated, only if still truncated after URL slug attempt)
   let apolloData = null;
   if (name && company && (!pbData?.linkedinUrl || lastNameTruncated)) {
     try {
@@ -193,6 +243,7 @@ async function lookupPbContact(company, name) {
     SELECT full_name, first_name, last_name, title, industry, location,
            linkedin_profile_url,
            raw_data->>'profileImageUrl' AS profile_image,
+           raw_data->>'defaultProfileUrl' AS default_profile_url,
            raw_data->>'summary' AS summary,
            raw_data->>'durationInRole' AS duration_in_role,
            raw_data->>'durationInCompany' AS duration_in_company,
@@ -247,6 +298,7 @@ async function lookupPbContact(company, name) {
     industry: best.industry,
     location: best.location,
     linkedinUrl: best.linkedin_profile_url,
+    defaultProfileUrl: best.default_profile_url,
     profileImage: best.profile_image,
     summary: best.summary,
     durationInRole: best.duration_in_role,
