@@ -103,7 +103,7 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       // 5: Email engagement from webhook events
       email
         ? pool.query(
-            `SELECT event_type, created_at, campaign_name
+            `SELECT event_type, created_at, payload_json->>'campaign_name' AS campaign_name
              FROM v35_webhook_events
              WHERE lead_email = $1
              ORDER BY created_at DESC LIMIT 10`,
