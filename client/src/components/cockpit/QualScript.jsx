@@ -39,7 +39,7 @@ export default function QualScript({ adaptedScript }) {
 
   return (
     <div className="mb-3">
-      <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px] mb-1.5">
+      <div className="cp-label mb-1.5">
         Qual script — {done}/{total}
       </div>
       <div

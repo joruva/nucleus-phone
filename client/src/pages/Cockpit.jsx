@@ -60,12 +60,12 @@ function ScoreSection({ label, weight, color, children }) {
     <div className="mb-4">
       <div className="flex items-center gap-2 mb-2">
         <span
-          className="inline-flex items-center px-2 py-[2px] rounded text-[10px] font-bold uppercase tracking-wider"
+          className="inline-flex items-center px-2 py-[2px] rounded cp-label"
           style={{ background: c.bg, color: c.text, border: `1px solid ${c.border}` }}
         >
           {label}
         </span>
-        <span className="text-[10px] font-semibold" style={{ color: c.text }}>{weight}</span>
+        <span className="cp-detail font-semibold" style={{ color: c.text }}>{weight}</span>
         <div className="flex-1 h-px" style={{ background: c.border }} />
       </div>
       {children}
@@ -95,26 +95,27 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
         </div>
       </div>
 
-      {/* Bridge layout: 3-column — matches practice mode exactly */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3" style={{ minHeight: '320px' }}>
+      {/* Bridge layout: 3-column — matches practice mode */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3">
 
-        {/* Left stations — Rapport + Discovery */}
+        {/* Left — Rapport + Career + Discovery + Intel */}
         <div className="min-w-0 flex flex-col gap-0">
           <ScoreSection label="Rapport" weight="20%" color="amber">
             <RapportOpener openingLine={d.rapport?.opening_line} />
             <RapportTags tags={d.rapport?.rapport_starters} />
           </ScoreSection>
+          <CareerContext pbContactData={d.identity?.pbContactData} />
           <ScoreSection label="Discovery" weight="25%" color="blue">
-            <QualScript adaptedScript={d.rapport?.adapted_script} />
             <IntelNuggets nuggets={d.rapport?.intel_nuggets} />
           </ScoreSection>
-          <CareerContext pbContactData={d.identity?.pbContactData} />
           <EmailEngagement emailEngagement={d.emailEngagement} />
         </div>
 
-        {/* CENTER — Main Viewscreen */}
+        {/* CENTER — Viewscreen */}
         <div className="min-w-0 flex flex-col">
-          <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} contact={d.identity} callId={liveCallId} isPractice={false} />
+          <div className="cockpit-viewscreen">
+            <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} contact={d.identity} callId={liveCallId} isPractice={false} />
+          </div>
           <CompanyVernacular vernacular={d.companyVernacular} />
           <CompanyIntel
             companyData={d.companyData}
@@ -125,11 +126,12 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
           />
         </div>
 
-        {/* Right stations — Objections + Product */}
+        {/* Right — Objections + Qual Script + Product + Timeline */}
         <div className="min-w-0 flex flex-col gap-0">
           <ScoreSection label="Objection Handling" weight="25%" color="orange">
             <IntelNuggets watchOuts={d.rapport?.watch_outs} />
           </ScoreSection>
+          <QualScript adaptedScript={d.rapport?.adapted_script} />
           <ScoreSection label="Product & Close" weight="30%" color="green">
             <ProductReference productReference={d.rapport?.product_reference} />
           </ScoreSection>
@@ -247,31 +249,33 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
                 </div>
 
                 {/* Bridge layout: 3-column with viewscreen center */}
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3" style={{ minHeight: '320px' }}>
+                <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-3 px-5 pb-3">
 
-                  {/* Left stations — Rapport + Discovery */}
+                  {/* Left — Rapport + Career + Discovery + Intel */}
                   <div className="min-w-0 flex flex-col gap-0">
                     <ScoreSection label="Rapport" weight="20%" color="amber">
                       <RapportOpener openingLine={d.rapport?.opening_line} />
                       <RapportTags tags={d.rapport?.rapport_starters} />
                     </ScoreSection>
+                    <CareerContext pbContactData={d.identity?.pbContactData} />
                     <ScoreSection label="Discovery" weight="25%" color="blue">
-                      <QualScript adaptedScript={d.rapport?.adapted_script} />
                       <IntelNuggets nuggets={d.rapport?.intel_nuggets} />
                     </ScoreSection>
-                    <CareerContext pbContactData={d.identity?.pbContactData} />
                   </div>
 
-                  {/* CENTER — Main Viewscreen */}
+                  {/* CENTER — Viewscreen */}
                   <div className="min-w-0 flex flex-col">
-                    <LiveAnalysis data={liveAnalysis} active={!!activeSimCallId} contact={d.identity} callId={liveCallId} />
+                    <div className="cockpit-viewscreen">
+                      <LiveAnalysis data={liveAnalysis} active={!!activeSimCallId} contact={d.identity} callId={liveCallId} />
+                    </div>
                   </div>
 
-                  {/* Right stations — Objections + Product */}
+                  {/* Right — Objections + Qual Script + Product */}
                   <div className="min-w-0 flex flex-col gap-0">
                     <ScoreSection label="Objection Handling" weight="25%" color="orange">
                       <IntelNuggets watchOuts={d.rapport?.watch_outs} />
                     </ScoreSection>
+                    <QualScript adaptedScript={d.rapport?.adapted_script} />
                     <ScoreSection label="Product & Close" weight="30%" color="green">
                       <ProductReference productReference={d.rapport?.product_reference} />
                     </ScoreSection>

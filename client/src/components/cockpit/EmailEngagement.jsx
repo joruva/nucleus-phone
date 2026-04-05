@@ -46,7 +46,7 @@ export default function EmailEngagement({ emailEngagement }) {
 
   return (
     <div className="mb-3">
-      <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px] mb-1.5">
+      <div className="cp-label mb-1.5">
         Email engagement
       </div>
       <div className="rounded py-2.5 px-3.5 bg-cp-card border border-cp-border">

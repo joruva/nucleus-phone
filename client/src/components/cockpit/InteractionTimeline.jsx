@@ -57,7 +57,7 @@ export default function InteractionTimeline({ interactionHistory, priorCalls }) 
         style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
+        <div className="cp-label">
           Timeline ({entries.length})
         </div>
         <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>

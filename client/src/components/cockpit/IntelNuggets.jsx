@@ -56,7 +56,7 @@ export default function IntelNuggets({ nuggets, watchOuts, label }) {
   return (
     <div className="mb-3 min-w-0">
       <div className="flex items-center justify-between mb-1.5">
-        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
+        <div className="cp-label">
           {label || 'Intelligence nuggets'}
         </div>
         {items.length > 10 && (
@@ -87,7 +87,7 @@ export default function IntelNuggets({ nuggets, watchOuts, label }) {
               }}
             >
               <div
-                className="text-[11px] font-semibold uppercase tracking-[1.5px] mb-1"
+                className="cp-label mb-1"
                 style={{ color: c.accent }}
               >
                 {n.category}

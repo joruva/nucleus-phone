@@ -5,8 +5,8 @@ function Section({ label, items, renderItem }) {
   return (
     <div className="mb-2 last:mb-0">
       <div className="flex items-center gap-2 mb-1">
-        <span className="text-[10px] font-semibold text-cp-text-muted uppercase tracking-wider">{label}</span>
-        <span className="text-[10px] text-cp-text-muted">({items.length})</span>
+        <span className="cp-label">{label}</span>
+        <span className="cp-detail">({items.length})</span>
       </div>
       {items.map((item, i) => (
         <div key={i} className="text-xs text-cp-text leading-relaxed py-0.5">
@@ -24,7 +24,7 @@ function TextBlock({ label, text, maxChars = 300 }) {
 
   return (
     <div className="mb-2 last:mb-0">
-      <div className="text-[10px] font-semibold text-cp-text-muted uppercase tracking-wider mb-1">{label}</div>
+      <div className="cp-label mb-1">{label}</div>
       <p className="text-xs text-cp-text-secondary leading-relaxed">
         {truncated ? text.substring(0, maxChars) + '...' : text}
       </p>
@@ -60,11 +60,11 @@ export default function CompanyVernacular({ vernacular }) {
         onClick={() => setOpen(!open)}
       >
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
+          <span className="cp-label">
             Company vernacular
           </span>
           <span
-            className="text-[9px] font-bold px-1.5 py-[1px] rounded"
+            className="cp-detail font-semibold px-1.5 py-[1px] rounded"
             style={{
               background: 'var(--cockpit-amber-50)',
               color: 'var(--cockpit-amber-600)',

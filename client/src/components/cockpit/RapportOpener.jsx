@@ -13,7 +13,7 @@ export default function RapportOpener({ openingLine }) {
         <span className="text-lg shrink-0 mt-0.5">🎯</span>
         <div>
           <div
-            className="text-[11px] font-semibold uppercase tracking-[1.5px] mb-0.5"
+            className="cp-label mb-0.5"
             style={{ color: 'var(--cockpit-amber-600)' }}
           >
             Suggested opener

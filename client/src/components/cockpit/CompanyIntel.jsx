@@ -87,7 +87,7 @@ export default function CompanyIntel({ companyData, icpScore, pipelineData, sign
         style={{ marginBottom: open ? 6 : 0 }}
         onClick={() => setOpen(!open)}
       >
-        <div className="text-[11px] font-semibold text-cp-text-muted uppercase tracking-[1.5px]">
+        <div className="cp-label">
           Company intel
         </div>
         <span className="text-xs text-cp-text-muted">{open ? '▾' : '▸'}</span>
