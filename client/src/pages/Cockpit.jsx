@@ -237,6 +237,8 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
                       companyData={d.companyData}
                       icpScore={d.icpScore}
                       pipelineData={d.pipelineData}
+                      signalMetadata={d.signalMetadata}
+                      pbContactData={d.identity?.pbContactData}
                     />
                   </div>
                 </div>

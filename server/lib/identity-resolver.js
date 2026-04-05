@@ -138,6 +138,8 @@ async function resolve(identifier) {
     profileImage: pbData?.profileImage || null,
     pbContactData: pbData ? {
       summary: pbData.summary,
+      industry: pbData.industry,
+      location: pbData.location,
       durationInRole: pbData.durationInRole,
       durationInCompany: pbData.durationInCompany,
       pastExperience: pbData.pastExperience,
@@ -230,6 +232,8 @@ async function lookupPbContact(company, name) {
 
   return {
     title: best.title,
+    industry: best.industry,
+    location: best.location,
     linkedinUrl: best.linkedin_profile_url,
     profileImage: best.profile_image,
     summary: best.summary,

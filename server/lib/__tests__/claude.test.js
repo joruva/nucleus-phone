@@ -84,6 +84,69 @@ describe('generateRapportIntel', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  test('fallback uses signal metadata for SPEAR contact', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    const spearContact = {
+      hubspotContactId: 'hs-spear',
+      name: 'Logan Torres',
+      company: 'Precision Aero',
+      title: 'VP Quality',
+      signalMetadata: {
+        signal_tier: 'SPEAR',
+        signal_score: 92,
+        cert_expiry_date: new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
+        cert_standard: 'AS9100',
+        cert_body: 'NQA',
+        contract_total: 1500000,
+        dod_flag: true,
+        source_count: 3,
+        signal_sources: ['SAM.gov', 'FPDS'],
+      },
+    };
+    const result = await generateRapportIntel(spearContact);
+    expect(result.fallback).toBe(true);
+    // Should have cert-related talking points
+    expect(result.rapport_starters.some(s => s.includes('AS9100'))).toBe(true);
+    // Should have DoD intel nugget
+    expect(result.intel_nuggets.some(n => n.includes('DoD'))).toBe(true);
+    // Opening line should NOT be generic
+    expect(result.opening_line).not.toContain('this is calling from Joruva Industrial.');
+    expect(result.opening_line).toContain('Logan');
+  });
+
+  test('fallback handles expired cert correctly', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    const expiredContact = {
+      hubspotContactId: 'hs-expired',
+      name: 'Dana Park',
+      company: 'Legacy Machining',
+      title: 'Quality Manager',
+      signalMetadata: {
+        signal_tier: 'TARGETED',
+        cert_expiry_date: '2025-06-15T00:00:00Z', // well in the past
+        cert_standard: 'ISO 9001',
+        cert_body: 'BSI',
+        dod_flag: false,
+      },
+    };
+    const result = await generateRapportIntel(expiredContact);
+    expect(result.fallback).toBe(true);
+    expect(result.rapport_starters.some(s => s.includes('expired'))).toBe(true);
+    expect(result.rapport_starters.some(s => s.includes('BSI'))).toBe(true);
+    expect(result.intel_nuggets.some(n => n.includes('expired'))).toBe(true);
+    // Must NOT say "expires" (future tense) for a past-date cert
+    expect(result.rapport_starters.every(s => !s.includes('expires'))).toBe(true);
+  });
+
+  test('fallback with no signal data still works', async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    const bareContact = { name: 'Alex Smith' };
+    const result = await generateRapportIntel(bareContact);
+    expect(result.fallback).toBe(true);
+    expect(result.opening_line).toContain('Alex');
+    expect(result.rapport_starters.length).toBeGreaterThan(0);
+  });
+
   test('clearCache without key clears all', async () => {
     mockFetchResponse(CLAUDE_RESPONSE);
     await generateRapportIntel(CONTACT);

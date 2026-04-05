@@ -31,11 +31,14 @@ Given contact data (name, title, company, interaction history, pipeline data, PB
 - watch_outs: Array of 0-2 things to avoid (e.g., competitor mentions, past complaints, sensitive topics).
 - product_reference: Relevant product lines based on their history/industry.
 
-When signal metadata is present (signal_tier, cert_expiry, contract_total, dod_flag), weave it into the opening_line and intel_nuggets:
-- For cert expiry within 9 months: mention upcoming recertification as a conversation hook (e.g., "your AS9100 is up for renewal")
-- For DoD/government contracts: reference compliance or mil-spec requirements naturally
+When signal metadata is present (signal_tier, cert_expiry, contract_total, dod_flag, cert_body, signal_sources), weave it into the opening_line and intel_nuggets:
+- For cert expiry within 9 months: mention upcoming recertification as a conversation hook (e.g., "your AS9100 is up for renewal"). If cert_body is known (e.g., "NQA", "BSI"), mention it naturally — "I know NQA audits can be thorough..."
+- For DoD/government contracts: reference compliance or mil-spec requirements naturally. Use contract_total to gauge scale.
 - For SPEAR-tier contacts: the opener should be direct and high-value, referencing the specific signal that flagged them
 - For TARGETED-tier: reference their industry fit
+- When signal_sources is available, use the source context (e.g., "SAM.gov" → government procurement, "FPDS" → defense contracts) to inform your talking points
+- Adapt talking points to the contact's TITLE: VP Ops → operational efficiency; QA Director → compliance and audit readiness; Purchasing → cost optimization; Maintenance → equipment reliability and downtime
+- When pbContactData includes industry or location, use them to ground recommendations in the contact's geography and vertical
 - NEVER mention tiers, scores, or signal data by name — use the underlying facts naturally.
 
 Respond with ONLY valid JSON, no markdown fences.`;
@@ -66,20 +69,123 @@ function setCache(key, data) {
   cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL });
 }
 
+// Map contact titles to their likely priority when discussing compressed air systems
+const TITLE_ANGLES = {
+  'operations':  { topic: 'operational efficiency', hook: 'uptime and throughput' },
+  'quality':     { topic: 'compliance and audit readiness', hook: 'certification requirements' },
+  'maintenance': { topic: 'equipment reliability', hook: 'maintenance costs and downtime' },
+  'purchasing':  { topic: 'cost optimization', hook: 'total cost of ownership' },
+  'plant':       { topic: 'plant performance', hook: 'capacity and reliability' },
+  'engineering': { topic: 'system design', hook: 'specs and performance requirements' },
+  'facilities':  { topic: 'facility infrastructure', hook: 'system reliability and efficiency' },
+  'supply':      { topic: 'supply chain continuity', hook: 'equipment lead times' },
+};
+
+function titleAngle(title) {
+  if (!title) return null;
+  const lower = title.toLowerCase();
+  for (const [key, angle] of Object.entries(TITLE_ANGLES)) {
+    if (lower.includes(key)) return angle;
+  }
+  return null;
+}
+
 function buildFallback(contactData) {
   const name = contactData.name || 'there';
+  const firstName = name.split(' ')[0];
+  const signal = contactData.signalMetadata;
   const starters = [];
-  if (contactData.company) starters.push(`Ask about their role at ${contactData.company}`);
-  if (contactData.title) starters.push(`Reference their work as ${contactData.title}`);
+  const nuggets = [];
+  let opener = '';
+
+  // Signal-driven content
+  if (signal) {
+    // Cert expiry — strongest conversation hook
+    if (signal.cert_expiry_date && signal.cert_standard) {
+      const expiry = new Date(signal.cert_expiry_date);
+      const monthsOut = Math.round((expiry - Date.now()) / (30 * 24 * 60 * 60 * 1000));
+      const expiryStr = expiry.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      const certName = signal.cert_standard;
+
+      const bodyRef = signal.cert_body ? ` (${signal.cert_body})` : '';
+      const isExpired = expiry < Date.now();
+
+      if (isExpired) {
+        starters.push(`Their ${certName} cert appears expired${bodyRef} — recertification is urgent`);
+        nuggets.push(`${certName} expired — compliance gap is a strong opening for equipment audit conversations`);
+      } else if (monthsOut <= 9) {
+        starters.push(`Their ${certName} cert expires ${expiryStr}${bodyRef} — ask about recertification timeline`);
+        nuggets.push(`${certName} renewal in ${monthsOut} months — compressed air system compliance is often part of recertification audits`);
+      } else {
+        starters.push(`They hold ${certName} certification${bodyRef} — reference quality/compliance standards`);
+      }
+    }
+
+    // DoD / government contracts
+    if (signal.dod_flag) {
+      const contractStr = signal.contract_total
+        ? signal.contract_total >= 1e6
+          ? ` ($${(signal.contract_total / 1e6).toFixed(1)}M in contracts)`
+          : signal.contract_total >= 1e3
+            ? ` ($${Math.round(signal.contract_total / 1e3)}K in contracts)`
+            : ` ($${signal.contract_total.toLocaleString('en-US')} in contracts)`
+        : '';
+      nuggets.push(`Active DoD contractor${contractStr} — mil-spec and ITAR compliance likely matter`);
+      starters.push('Reference their government/defense work — ask about compliance requirements for shop floor equipment');
+    }
+
+    // Signal source context
+    const sources = signal.signal_sources;
+    if (Array.isArray(sources) && sources.length) {
+      nuggets.push(`Flagged via ${sources.join(', ')} — confirms active government/procurement presence`);
+    }
+
+    // Tier-based opener
+    if (signal.signal_tier === 'SPEAR') {
+      opener = `Hi ${firstName}, this is Tom from Joruva Industrial — we work with aerospace and defense manufacturers on their compressed air systems.`;
+    } else if (signal.signal_tier === 'TARGETED') {
+      opener = `Hi ${firstName}, this is Tom from Joruva Industrial — we specialize in compressed air systems for manufacturers in your space.`;
+    }
+  }
+
+  // Title-specific talking point
+  const angle = titleAngle(contactData.title);
+  if (angle) {
+    starters.push(`As ${contactData.title}, they likely care about ${angle.topic} — lead with ${angle.hook}`);
+  }
+
+  // Pad to at least 2 starters with generic fallbacks
+  if (contactData.company && starters.length < 2) {
+    starters.push(`Ask about their role at ${contactData.company}`);
+  }
+  if (contactData.title && !angle && starters.length < 2) {
+    starters.push(`Reference their work as ${contactData.title}`);
+  }
   if (!starters.length) starters.push('Start with a warm introduction about Joruva Industrial');
+
+  // Default opener if signal didn't set one
+  if (!opener) {
+    opener = contactData.company
+      ? `Hi ${firstName}, this is Tom from Joruva Industrial — do you have a moment to talk about your compressed air setup at ${contactData.company}?`
+      : `Hi ${firstName}, this is Tom from Joruva Industrial.`;
+  }
+
+  // PB enrichment context
+  const pb = contactData.pbContactData;
+  if (pb?.industry) nuggets.push(`Industry: ${pb.industry}`);
+  if (pb?.location) nuggets.push(`Location: ${pb.location}`);
 
   return {
     fallback: true,
-    rapport_starters: starters,
-    intel_nuggets: [],
-    opening_line: `Hi ${name.split(' ')[0]}, this is calling from Joruva Industrial.`,
-    adapted_script: '',
-    watch_outs: [],
+    rapport_starters: starters.slice(0, 3),
+    intel_nuggets: nuggets.slice(0, 4),
+    opening_line: opener,
+    adapted_script: angle
+      ? `Focus on ${angle.topic}. Frame Joruva's value around ${angle.hook}.`
+      : '',
+    watch_outs: signal?.dod_flag
+      ? ['Avoid discussing specific contract details — let them bring it up']
+      : [],
     product_reference: [],
   };
 }
@@ -125,9 +231,11 @@ function trimForClaude(contactData) {
       signal_score: contactData.signalMetadata.signal_score,
       cert_expiry_date: contactData.signalMetadata.cert_expiry_date,
       cert_standard: contactData.signalMetadata.cert_standard,
+      cert_body: contactData.signalMetadata.cert_body,
       contract_total: contactData.signalMetadata.contract_total,
       dod_flag: contactData.signalMetadata.dod_flag,
       source_count: contactData.signalMetadata.source_count,
+      signal_sources: contactData.signalMetadata.signal_sources,
     } : null,
   };
 }

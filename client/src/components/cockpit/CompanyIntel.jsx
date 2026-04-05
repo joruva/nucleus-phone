@@ -1,8 +1,15 @@
 import { useState } from 'react';
 
-function buildRows(companyData, icpScore, pipelineData) {
+function formatCurrency(amount) {
+  if (!amount) return null;
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency', currency: 'USD',
+    minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function buildRows(companyData, icpScore, pipelineData, signalMetadata, pbContactData) {
   const rows = [];
-  if (!companyData && !icpScore) return rows;
 
   if (companyData) {
     if (companyData.name) rows.push(['Company', companyData.name]);
@@ -12,6 +19,36 @@ function buildRows(companyData, icpScore, pipelineData) {
     if (companyData.numberofemployees) rows.push(['Employees', companyData.numberofemployees]);
     if (companyData.annualrevenue) rows.push(['Revenue', companyData.annualrevenue]);
     if (companyData.company_vernacular) rows.push(['Internal note', companyData.company_vernacular]);
+  }
+
+  // PB enrichment fills gaps when HubSpot company data is absent
+  if (!companyData?.industry && pbContactData?.industry)
+    rows.push(['Industry', pbContactData.industry]);
+  if (!companyData?.city && pbContactData?.location)
+    rows.push(['Location', pbContactData.location]);
+
+  // Signal metadata — cert, contracts, sources
+  if (signalMetadata) {
+    if (signalMetadata.cert_standard) {
+      let certValue = signalMetadata.cert_standard;
+      if (signalMetadata.cert_body) certValue += ` (${signalMetadata.cert_body})`;
+      rows.push(['Certification', certValue]);
+    }
+    if (signalMetadata.cert_expiry_date) {
+      const expiry = new Date(signalMetadata.cert_expiry_date);
+      const isExpired = expiry < Date.now();
+      const expiryStr = expiry.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      rows.push(['Cert Expiry', isExpired ? `${expiryStr} — EXPIRED` : expiryStr]);
+    }
+    if (signalMetadata.contract_total) {
+      const label = signalMetadata.dod_flag ? 'DoD Contracts' : 'Govt Contracts';
+      rows.push([label, formatCurrency(signalMetadata.contract_total)]);
+    } else if (signalMetadata.dod_flag) {
+      rows.push(['DoD Contractor', 'Yes']);
+    }
+    if (signalMetadata.source_count > 1) {
+      rows.push(['Signal Sources', `${signalMetadata.source_count}x match`]);
+    }
   }
 
   if (icpScore) {
@@ -28,9 +65,9 @@ function buildRows(companyData, icpScore, pipelineData) {
   return rows;
 }
 
-export default function CompanyIntel({ companyData, icpScore, pipelineData }) {
+export default function CompanyIntel({ companyData, icpScore, pipelineData, signalMetadata, pbContactData }) {
   const [open, setOpen] = useState(true);
-  const rows = buildRows(companyData, icpScore, pipelineData);
+  const rows = buildRows(companyData, icpScore, pipelineData, signalMetadata, pbContactData);
 
   if (!rows.length) return null;
 
