@@ -128,6 +128,7 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       identity.hubspotCompanyId
         ? getCompany(identity.hubspotCompanyId).catch(() => null)
         : Promise.resolve(null),
+
     ];
 
     const [
@@ -139,6 +140,23 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       emailEngagement,
       companyData,
     ] = await Promise.all(queries);
+
+    // Step 2b: Fetch enriched contacts using domain from ICP query
+    const companyDomain = icpAndSignal?.domain || null;
+    let enrichedContacts = [];
+    if (companyDomain) {
+      try {
+        const { rows } = await pool.query(
+          `SELECT full_name, title, email, phone, linkedin_profile_url
+           FROM v35_pb_contacts
+           WHERE domain = $1
+           ORDER BY phone IS NOT NULL DESC, email IS NOT NULL DESC
+           LIMIT 10`,
+          [companyDomain]
+        );
+        enrichedContacts = rows;
+      } catch { /* table may not exist */ }
+    }
 
     // Split combined query #3 into ICP score (with company enrichment) and signal metadata
     const icpScore = icpAndSignal
@@ -216,6 +234,7 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
       companyData: companyData?.properties || null,
       signalMetadata,
       companyVernacular,
+      enrichedContacts: enrichedContacts || [],
     });
   } catch (err) {
     console.error('Cockpit assembly failed:', err.message);
