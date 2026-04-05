@@ -118,10 +118,12 @@ async function resolve(identifier) {
       lastNameTruncated = false; // Resolved — skip Apollo
       // Persist the fix back to PB contacts so we don't re-resolve every load
       const companyNorm = normalizeCompanyName(company);
+      const slugUrl = pbData?.linkedinUrl || pbData?.defaultProfileUrl;
       pool.query(
         `UPDATE v35_pb_contacts SET full_name = $1, first_name = $2, last_name = $3
-         WHERE first_name = $4 AND last_name ~ '^\\w\\.$' AND company_name_norm = $5`,
-        [name, resolved.firstName, resolved.lastName, resolved.firstName, companyNorm]
+         WHERE first_name = $4 AND last_name ~ '^\\w\\.$' AND company_name_norm = $5
+           AND ($6::text IS NULL OR linkedin_profile_url = $6)`,
+        [name, resolved.firstName, resolved.lastName, resolved.firstName, companyNorm, slugUrl || null]
       ).catch(err => console.warn('identity-resolver: slug name persist failed:', err.message));
     }
   }
