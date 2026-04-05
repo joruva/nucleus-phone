@@ -77,8 +77,8 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
         : Promise.resolve([]),
 
       // 3: ICP score + signal metadata (single query via LEFT JOIN)
-      // Use normalized company name (strips LLC, Inc, Corp, etc.) to match
-      // across sources that store different suffix variants.
+      // Normalize both sides (strip LLC, Inc, Corp, etc.) for exact match.
+      // Prefix LIKE was too greedy — "Shaw" matched "Shawnee State University".
       identity.company
         ? pool.query(
             `SELECT lr.domain,
@@ -92,7 +92,11 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
                     sm.contract_total, sm.dod_flag, sm.signal_sources
              FROM v35_lead_reservoir lr
              LEFT JOIN v35_signal_metadata sm ON sm.domain = lr.domain
-             WHERE LOWER(lr.company_name) LIKE $1 || '%'
+             WHERE LOWER(REGEXP_REPLACE(
+               lr.company_name,
+               ',?\\s*(Inc\\.?|LLC|Corp\\.?|Ltd\\.?|Co\\.?|LP|L\\.P\\.?|Corporation|Limited|Company|Holdings|Group)\\s*$',
+               '', 'i'
+             )) = $1
              LIMIT 1`,
             [normalizeCompanyName(identity.company)]
           ).then(r => r.rows[0] || null).catch(() => null)
