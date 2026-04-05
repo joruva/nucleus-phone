@@ -103,7 +103,7 @@ async function getSignalContacts({
     ? await pool.query(
         `SELECT full_name, first_name, last_name, title, company_name,
                 company_name_norm, linkedin_profile_url, location, industry,
-                phone, source
+                phone, email, source
          FROM v35_pb_contacts
          WHERE company_name_norm = ANY($1)`,
         [uniqueNorms],
@@ -152,6 +152,7 @@ async function getSignalContacts({
       last_name: c.last_name,
       title: c.title,
       phone: c.phone || null,
+      email: c.email || null,
       linkedin_url: c.linkedin_profile_url,
       location: c.location,
       source: c.source || 'phantombuster',

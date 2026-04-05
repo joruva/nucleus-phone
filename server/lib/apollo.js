@@ -123,12 +123,35 @@ async function searchPeopleByCompany(domain, titleFilters = DEFAULT_TITLE_FILTER
   const apiKey = process.env.APOLLO_API_KEY;
   if (!apiKey) return { previews: [], contacts: [], creditsUsed: 0 };
 
-  // Step 1: Free search — get anonymized previews
+  // Step 1: Resolve domain → Apollo org ID (free, no credits)
+  const orgResp = await fetch(`${BASE_URL}/organizations/search`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+    body: JSON.stringify({ q_organization_domains: domain, per_page: 1 }),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  if (!orgResp.ok) {
+    const text = await orgResp.text().catch(() => '');
+    throw new Error(`Apollo org search failed: ${orgResp.status} ${text.substring(0, 200)}`);
+  }
+
+  const orgData = await orgResp.json();
+  const org = orgData.organizations?.[0];
+  if (!org?.id) return { previews: [], contacts: [], creditsUsed: 0 };
+
+  // Verify domain match — reject if Apollo returns a different org
+  const orgDomain = (org.primary_domain || '').toLowerCase();
+  if (orgDomain && orgDomain !== domain.toLowerCase()) {
+    return { previews: [], contacts: [], creditsUsed: 0 };
+  }
+
+  // Step 2: Search people by org ID + title filters (free search)
   const searchResp = await fetch(`${BASE_URL}/mixed_people/api_search`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify({
-      organization_domains: [domain],
+      organization_ids: [org.id],
       person_titles: titleFilters,
       page: 1,
       per_page: Math.min(perPage, 25),
@@ -138,13 +161,13 @@ async function searchPeopleByCompany(domain, titleFilters = DEFAULT_TITLE_FILTER
 
   if (!searchResp.ok) {
     const text = await searchResp.text().catch(() => '');
-    throw new Error(`Apollo search failed: ${searchResp.status} ${text.substring(0, 200)}`);
+    throw new Error(`Apollo people search failed: ${searchResp.status} ${text.substring(0, 200)}`);
   }
 
   const searchData = await searchResp.json();
   const previews = searchData.people || [];
 
-  // Step 2: Reveal only contacts that have phone numbers (saves credits)
+  // Step 3: Reveal contacts that have phone numbers (1 credit each)
   const withPhone = previews.filter(p => p.has_direct_phone === 'Yes');
   const contacts = [];
   let creditsUsed = 0;

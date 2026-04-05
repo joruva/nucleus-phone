@@ -2,10 +2,15 @@
 /**
  * scripts/run-enrichment-uncapped.js
  *
- * Run signal enrichment WITHOUT credit gate. One-time use for backfilling
- * contacts after bulk domain resolution.
+ * Contact enrichment for signal-scored companies. Finds callable people
+ * (with phone numbers) at Spear/Targeted companies via Apollo People Search.
  *
- * Usage: node scripts/run-enrichment-uncapped.js [--dry-run] [--limit N]
+ * Credit model:
+ *   - Search (free): finds anonymized contact previews at a domain
+ *   - Reveal (1 credit): gets full name, email, phone, LinkedIn for one person
+ *   - Only reveals contacts flagged has_direct_phone === "Yes"
+ *
+ * Usage: node scripts/run-enrichment-uncapped.js [--dry-run] [--limit N] [--credit-cap N]
  */
 
 require('dotenv').config();
@@ -26,11 +31,60 @@ const LIMIT = (() => {
   const idx = process.argv.indexOf('--limit');
   return idx >= 0 ? parseInt(process.argv[idx + 1], 10) : 500;
 })();
+const CREDIT_CAP = (() => {
+  const idx = process.argv.indexOf('--credit-cap');
+  return idx >= 0 ? parseInt(process.argv[idx + 1], 10) : 5000;
+})();
+
+async function upsertContact(contact, company, batchId) {
+  const norm = normalizeCompanyName(company.company_name);
+
+  // Handle both unique constraints: linkedin URL and (domain, email)
+  // Use two-step: try insert, on conflict update
+  try {
+    await pool.query(
+      `INSERT INTO v35_pb_contacts
+         (full_name, first_name, last_name, title, company_name, company_name_norm,
+          linkedin_profile_url, email, phone, domain, source, enrichment_batch_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'apollo', $11)
+       ON CONFLICT (domain, email)
+         WHERE source = 'apollo' AND email IS NOT NULL
+       DO UPDATE SET
+         phone = COALESCE(EXCLUDED.phone, v35_pb_contacts.phone),
+         title = COALESCE(EXCLUDED.title, v35_pb_contacts.title),
+         full_name = COALESCE(EXCLUDED.full_name, v35_pb_contacts.full_name),
+         linkedin_profile_url = COALESCE(EXCLUDED.linkedin_profile_url, v35_pb_contacts.linkedin_profile_url)`,
+      [
+        contact.name, contact.first_name, contact.last_name, contact.title,
+        company.company_name, norm,
+        contact.linkedin_url, contact.email, contact.phone, company.domain, batchId,
+      ],
+    );
+    return true;
+  } catch (err) {
+    if (err.message.includes('idx_pbc_linkedin_unique')) {
+      // LinkedIn URL already exists for a different company — update the existing row
+      await pool.query(
+        `UPDATE v35_pb_contacts SET
+           phone = COALESCE($1, phone), title = COALESCE($2, title),
+           email = COALESCE($3, email), domain = COALESCE($4, domain)
+         WHERE linkedin_profile_url = $5`,
+        [contact.phone, contact.title, contact.email, company.domain, contact.linkedin_url],
+      );
+      return true;
+    }
+    console.error(`    DB error for ${contact.name}: ${err.message}`);
+    return false;
+  }
+}
 
 async function run() {
-  console.log(`\n=== Signal Enrichment (Uncapped) ===`);
-  console.log(`Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
-  console.log(`Limit: ${LIMIT}`);
+  const batchId = `spear-targeted-${new Date().toISOString().slice(0, 10)}`;
+
+  console.log(`\n=== Signal Contact Enrichment ===`);
+  console.log(`Mode:       ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
+  console.log(`Credit cap: ${CREDIT_CAP}`);
+  console.log(`Batch:      ${batchId}`);
   console.log(`Apollo key: ${process.env.APOLLO_API_KEY ? 'set' : 'MISSING'}\n`);
 
   if (!process.env.APOLLO_API_KEY) {
@@ -38,7 +92,7 @@ async function run() {
     process.exit(1);
   }
 
-  // Find SPEAR+TARGETED companies with real domains but no Apollo contacts
+  // Spear first, then Targeted — ordered by signal_score within each tier
   const { rows: companies } = await pool.query(
     `SELECT sm.domain, lr.company_name, sm.signal_tier, sm.signal_score
      FROM v35_signal_metadata sm
@@ -49,31 +103,45 @@ async function run() {
          SELECT 1 FROM v35_pb_contacts pb
          WHERE pb.domain = sm.domain AND pb.source = 'apollo'
        )
-     ORDER BY sm.signal_score DESC
+     ORDER BY
+       CASE sm.signal_tier WHEN 'spear' THEN 0 WHEN 'targeted' THEN 1 ELSE 2 END,
+       sm.signal_score DESC
      LIMIT $1`,
     [LIMIT],
   );
 
-  console.log(`Found ${companies.length} companies needing enrichment\n`);
+  console.log(`Companies to enrich: ${companies.length}`);
+  const spearCount = companies.filter(c => c.signal_tier === 'spear').length;
+  const targetedCount = companies.filter(c => c.signal_tier === 'targeted').length;
+  console.log(`  Spear: ${spearCount}  Targeted: ${targetedCount}\n`);
+
   if (!companies.length) {
-    console.log('Nothing to do.');
+    console.log('Nothing to enrich.');
     await pool.end();
     return;
   }
 
   let totalContacts = 0;
   let totalCredits = 0;
-  let processed = 0;
+  let companiesProcessed = 0;
+  let companiesWithContacts = 0;
   let noResults = 0;
   let errors = 0;
 
   for (let i = 0; i < companies.length; i++) {
     const c = companies[i];
+    const tier = c.signal_tier.toUpperCase().padEnd(8);
+
+    // Hard credit cap check
+    if (totalCredits >= CREDIT_CAP) {
+      console.log(`\n⛔ Credit cap reached (${totalCredits}/${CREDIT_CAP}). Stopping.`);
+      break;
+    }
 
     try {
       if (DRY_RUN) {
-        console.log(`  [${i + 1}/${companies.length}] Would enrich: ${c.company_name} (${c.domain})`);
-        processed++;
+        console.log(`  [${i + 1}/${companies.length}] [${tier}] Would enrich: ${c.company_name} (${c.domain})`);
+        companiesProcessed++;
         continue;
       }
 
@@ -81,59 +149,57 @@ async function run() {
       const { previews, contacts, creditsUsed } = result;
 
       if (contacts.length === 0) {
-        console.log(`  [${i + 1}/${companies.length}] ○ ${c.company_name} — ${previews.length} previews, 0 with phone`);
+        console.log(`  [${i + 1}/${companies.length}] [${tier}] ○ ${c.company_name} — ${previews.length} previews, 0 with phone`);
         noResults++;
       } else {
-        // Upsert contacts
-        const norm = normalizeCompanyName(c.company_name);
+        let stored = 0;
         for (const contact of contacts) {
           if (!contact.email && !contact.linkedin_url) continue;
-
-          await pool.query(
-            `INSERT INTO v35_pb_contacts
-               (full_name, first_name, last_name, title, company_name, company_name_norm,
-                linkedin_profile_url, email, phone, domain, source, enrichment_batch_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'apollo', 'uncapped-backfill')
-             ON CONFLICT (domain, email)
-               WHERE source = 'apollo' AND email IS NOT NULL
-             DO UPDATE SET
-               phone = COALESCE(EXCLUDED.phone, v35_pb_contacts.phone),
-               title = COALESCE(EXCLUDED.title, v35_pb_contacts.title),
-               linkedin_profile_url = COALESCE(EXCLUDED.linkedin_profile_url, v35_pb_contacts.linkedin_profile_url)`,
-            [
-              contact.name, contact.first_name, contact.last_name, contact.title,
-              c.company_name, norm,
-              contact.linkedin_url, contact.email, contact.phone, c.domain,
-            ],
-          );
+          const ok = await upsertContact(contact, c, batchId);
+          if (ok) stored++;
         }
 
-        console.log(`  [${i + 1}/${companies.length}] ✓ ${c.company_name} — ${contacts.length} contacts (${creditsUsed} credits)`);
-        totalContacts += contacts.length;
+        console.log(`  [${i + 1}/${companies.length}] [${tier}] ✓ ${c.company_name} — ${stored} contacts stored (${creditsUsed} credits)`);
+        totalContacts += stored;
+        companiesWithContacts++;
       }
 
       totalCredits += creditsUsed;
-      processed++;
+      companiesProcessed++;
 
-      // Rate limit: ~1 req/sec (Apollo search is free, reveals are throttled)
+      // Progress checkpoint every 25 companies
+      if (companiesProcessed % 25 === 0) {
+        console.log(`  --- checkpoint: ${companiesProcessed} companies, ${totalContacts} contacts, ${totalCredits} credits ---`);
+      }
+
+      // Rate limit: 1 req/sec
       if (i < companies.length - 1) {
         await new Promise(r => setTimeout(r, 1000));
       }
     } catch (err) {
-      console.error(`  [${i + 1}/${companies.length}] ! ${c.company_name} — ${err.message}`);
+      if (err.message.includes('insufficient credits')) {
+        console.error(`\n⛔ Apollo account credits exhausted after ${totalCredits} credits used.`);
+        break;
+      }
+      console.error(`  [${i + 1}/${companies.length}] [${tier}] ! ${c.company_name} — ${err.message}`);
       errors++;
-      // Throttle on errors (might be rate limit)
-      await new Promise(r => setTimeout(r, 3000));
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
 
-  console.log(`\n=== Results ===`);
-  console.log(`Companies processed: ${processed}`);
-  console.log(`Contacts found:      ${totalContacts}`);
-  console.log(`Credits consumed:    ${totalCredits}`);
-  console.log(`No results:          ${noResults}`);
-  console.log(`Errors:              ${errors}`);
-  console.log(`Total:               ${companies.length}`);
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`ENRICHMENT COMPLETE`);
+  console.log(`${'='.repeat(50)}`);
+  console.log(`Companies processed:      ${companiesProcessed}`);
+  console.log(`Companies with contacts:  ${companiesWithContacts}`);
+  console.log(`Companies without:        ${noResults}`);
+  console.log(`Total contacts stored:    ${totalContacts}`);
+  console.log(`Apollo credits consumed:  ${totalCredits}`);
+  console.log(`Errors:                   ${errors}`);
+  console.log(`Credit cap:               ${CREDIT_CAP}`);
+  console.log(`${'='.repeat(50)}`);
+
+  if (DRY_RUN) console.log(`\nDry run — no changes applied.`);
 
   await pool.end();
 }
