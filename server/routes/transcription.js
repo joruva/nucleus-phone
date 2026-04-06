@@ -99,7 +99,7 @@ router.post('/', twilioWebhook, async (req, res) => {
   });
 
   // Run entity extraction pipeline (fire-and-forget, don't block)
-  processEquipmentChunk(callId, 'real', String(call.id), TranscriptionText).catch((err) => {
+  processEquipmentChunk(callId, 'real', String(call.id), transcriptText).catch((err) => {
     console.error('transcription: pipeline error:', err.message);
   });
 });
