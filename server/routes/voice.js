@@ -58,7 +58,6 @@ router.post('/', twilioWebhook, async (req, res) => {
       partialResults: true,
       intelligenceService: process.env.TWILIO_INTELLIGENCE_SERVICE_SID || undefined,
     });
-    console.log('voice: transcription started for', ConferenceName, 'callback:', `${baseUrl}/api/transcription`);
 
     const dial = twiml.dial({ callerId: process.env.NUCLEUS_PHONE_NUMBER });
     dial.conference({
