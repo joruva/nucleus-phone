@@ -203,8 +203,10 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     : contactFilter === FILTER_HAS_CONTACTS
       ? companies.filter(c => c.contact_count > 0)
       : companies;
-  const spearTargeted = filtered.filter(c => c.signal_tier !== 'awareness');
-  const awareness = filtered.filter(c => c.signal_tier === 'awareness');
+  // When a specific tier is selected, show all matches in one flat list.
+  // Only split into main + collapsed awareness when showing all tiers.
+  const spearTargeted = tier ? filtered : filtered.filter(c => c.signal_tier !== 'awareness');
+  const awareness = tier ? [] : filtered.filter(c => c.signal_tier === 'awareness');
 
   return (
     <div className="flex flex-col h-full">
