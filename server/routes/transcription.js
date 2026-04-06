@@ -29,6 +29,15 @@ const twilioWebhook = twilio.webhook({
   url: `${baseUrl}/api/transcription`,
 });
 
+// Diagnostic: log ALL incoming requests before webhook validation
+router.use('/', (req, res, next) => {
+  console.log('transcription: incoming request',
+    req.method, req.path,
+    'body keys:', Object.keys(req.body || {}).join(','),
+    'event:', req.body?.TranscriptionEvent || req.body?.StatusCallbackEvent || 'none');
+  next();
+});
+
 router.post('/', twilioWebhook, async (req, res) => {
   res.sendStatus(204);
 
