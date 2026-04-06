@@ -104,16 +104,68 @@ describe('sync', () => {
 });
 
 describe('3-layer dedup', () => {
-  test('Layer 1: skips nucleus-phone title pattern', async () => {
+  test('Layer 1: enriches existing NPC row when title matches', async () => {
+    pool.query.mockImplementation((sql) => {
+      if (sql.includes('ucil_sync_state') && sql.includes('SELECT')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('ucil_sync_state')) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes("session_id LIKE 'npc_%'")) {
+        return { rows: [{ id: 77 }], rowCount: 1 };
+      }
+      if (sql.includes('UPDATE customer_interactions SET')) {
+        return { rows: [], rowCount: 1 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
     const npcTitle = makeTranscript({
       title: 'CNC Call — John Smith at Acme Corp — 2026-03-27',
     });
     mockFetchResponse({ data: { transcripts: [npcTitle] } });
+    mockFetchResponse(CLAUDE_ANALYSIS);
 
     const result = await sync();
-    expect(result.skipped).toBe(1);
-    expect(result.processed).toBe(0);
+    expect(result.processed).toBe(1);
+    expect(result.skipped).toBe(0);
+    // Should UPDATE existing row, not call syncInteraction
     expect(interactionSync.syncInteraction).not.toHaveBeenCalled();
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining('UPDATE customer_interactions SET'),
+      expect.arrayContaining([77]),
+    );
+  });
+
+  test('Layer 1: creates new ff_ row when NPC row not yet created (race)', async () => {
+    // NPC title matches but no customer_interactions row exists yet
+    pool.query.mockImplementation((sql) => {
+      if (sql.includes('ucil_sync_state') && sql.includes('SELECT')) {
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes('ucil_sync_state')) {
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.includes('customer_interactions')) {
+        return { rows: [], rowCount: 0 };
+      }
+      return { rows: [], rowCount: 0 };
+    });
+
+    const npcTitle = makeTranscript({
+      title: 'CNC Call — John Smith at Acme Corp — 2026-03-27',
+    });
+    mockFetchResponse({ data: { transcripts: [npcTitle] } });
+    mockFetchResponse(CLAUDE_ANALYSIS);
+
+    const result = await sync();
+    expect(result.processed).toBe(1);
+    expect(result.skipped).toBe(0);
+    // Should create new row via syncInteraction (data not lost)
+    expect(interactionSync.syncInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionId: 'ff_ff-001' }),
+    );
   });
 
   test('Layer 2: skips when npc_ session exists in timeframe', async () => {

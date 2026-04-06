@@ -159,13 +159,17 @@ function CompanyCard({ company, navigate, twilioStatus }) {
 
 // ── Main Contacts Page (Signal Queue only) ──────────────────────────
 
+const FILTER_HAS_PHONE = 'has_phone';
+const FILTER_HAS_CONTACTS = 'has_contacts';
+const FILTER_ALL = 'all';
+
 export default function Contacts({ identity, callState, twilioStatus }) {
   const [companies, setCompanies] = useState([]);
   const [callbacks, setCallbacks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [tier, setTier] = useState('');
   const [state, setState] = useState('');
-  const [contactFilter, setContactFilter] = useState('has_phone');
+  const [contactFilter, setContactFilter] = useState(FILTER_HAS_PHONE);
   const [awarenessOpen, setAwarenessOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -194,9 +198,9 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     return () => clearInterval(interval);
   }, []);
 
-  const filtered = contactFilter === 'has_phone'
+  const filtered = contactFilter === FILTER_HAS_PHONE
     ? companies.filter(c => c.contacts?.some(ct => ct.phone))
-    : contactFilter === 'has_contacts'
+    : contactFilter === FILTER_HAS_CONTACTS
       ? companies.filter(c => c.contact_count > 0)
       : companies;
   const spearTargeted = filtered.filter(c => c.signal_tier !== 'awareness');

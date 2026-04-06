@@ -32,7 +32,7 @@ function resolveNameFromSlug(url, firstName) {
   const parts = clean.split('-');
   if (parts.length >= 2 && parts[0].toLowerCase() === firstLower) {
     const last = parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-    if (last.length >= 2) return { firstName: cap(parts[0]), lastName: last };
+    if (last.length >= 2) return { firstName: capitalize(parts[0]), lastName: last };
   }
 
   // Concatenated: "ashleyparker" → Ashley Parker
@@ -40,22 +40,22 @@ function resolveNameFromSlug(url, firstName) {
   if (lower.startsWith(firstLower) && lower.length > firstLower.length + 1) {
     const rest = clean.slice(firstLower.length);
     if (rest.length >= 3 && rest.length <= 20 && /^[a-z]+$/i.test(rest)) {
-      return { firstName: cap(firstLower), lastName: cap(rest) };
+      return { firstName: capitalize(firstLower), lastName: capitalize(rest) };
     }
   }
 
   return null;
 }
 
-function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase(); }
 
-/** Convert normalized 10-digit phone to E.164 (+1XXXXXXXXXX) */
+/** Convert normalized digits to E.164. Assumes US (+1) for 10-digit numbers. */
 function toE164(phone) {
   if (!phone) return null;
   if (phone.startsWith('+')) return phone;
   if (phone.length === 10) return `+1${phone}`;
   if (phone.length === 11 && phone.startsWith('1')) return `+${phone}`;
-  return `+${phone}`;
+  return phone; // Don't guess country code for unknown lengths
 }
 
 /**

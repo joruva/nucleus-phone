@@ -101,8 +101,11 @@ async function checkDedup(transcript) {
       new Date(tDate.getTime() - DEDUP_WINDOW_MINUTES * 60000),
       new Date(tDate.getTime() + DEDUP_WINDOW_MINUTES * 60000),
     ]);
-    // Enrich the existing NPC row with AI analysis, or skip if no match
-    return { skip: !npcRows.length, enrichId: npcRows[0]?.id || null };
+    // If NPC row exists, enrich it. If not yet created (race: recording arrives
+    // before rep submits disposition), fall through to create a new ff_ row so
+    // the AI analysis isn't permanently lost.
+    if (npcRows.length) return { skip: false, enrichId: npcRows[0].id };
+    return { skip: false, enrichId: null };
   }
 
   const tDate = new Date(transcript.date);
