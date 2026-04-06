@@ -113,14 +113,107 @@ router.post('/', twilioWebhook, async (req, res) => {
   res.type('text/xml').send(twiml.toString());
 });
 
-// POST /api/voice/incoming/fallback — if the rep doesn't answer,
-// the caller stays in a silent conference. The conference-end callback
-// handles cleanup. For voicemail, we'd need to detect no-answer and
-// redirect — but the current status callback dial has earlyMedia +
-// endConferenceOnExit, so if the rep rejects/times out, the conference
-// ends and the caller is disconnected.
-//
-// Future enhancement: add a timeout monitor that plays a voicemail prompt
-// if the rep hasn't joined within 30 seconds.
+// POST /api/voice/incoming/rep-status — Twilio calls this when the rep's
+// participant leg changes state. If the rep doesn't answer, redirect the
+// caller out of the conference and into voicemail.
+const repStatusWebhook = twilio.webhook({
+  validate: process.env.NODE_ENV === 'production',
+  url: `${baseUrl}/api/voice/incoming/rep-status`,
+});
+
+router.post('/rep-status', repStatusWebhook, async (req, res) => {
+  res.sendStatus(204);
+
+  const { CallStatus } = req.body;
+  const conferenceName = req.query.conf;
+  if (!conferenceName) return;
+
+  const noAnswer = ['no-answer', 'busy', 'canceled', 'failed'].includes(CallStatus);
+  if (!noAnswer) return;
+
+  console.log(`incoming: rep did not answer (${CallStatus}) for ${conferenceName} — redirecting to voicemail`);
+
+  // Look up the caller's CallSid so we can redirect their leg
+  try {
+    const { rows } = await pool.query(
+      'SELECT caller_call_sid FROM nucleus_phone_calls WHERE conference_name = $1',
+      [conferenceName]
+    );
+    const callerSid = rows[0]?.caller_call_sid;
+    if (!callerSid) {
+      console.error('incoming: no caller_call_sid for voicemail redirect');
+      return;
+    }
+
+    // Redirect the caller's call leg to voicemail TwiML
+    const { client } = require('../lib/twilio');
+    await client.calls(callerSid).update({
+      url: `${baseUrl}/api/voice/incoming/voicemail`,
+      method: 'POST',
+    });
+
+    console.log(`incoming: redirected ${callerSid} to voicemail`);
+  } catch (err) {
+    console.error('incoming: voicemail redirect failed:', err.message);
+  }
+});
+
+// POST /api/voice/incoming/voicemail — TwiML that plays a message and records.
+// The caller lands here when redirected out of the conference.
+const voicemailWebhook = twilio.webhook({
+  validate: process.env.NODE_ENV === 'production',
+  url: `${baseUrl}/api/voice/incoming/voicemail`,
+});
+
+router.post('/voicemail', voicemailWebhook, (req, res) => {
+  const twiml = new VoiceResponse();
+
+  twiml.say({
+    voice: 'Polly.Joanna',
+  }, 'Thank you for calling Joruva Industrial. No one is available to take your call right now. Please leave a message after the tone and we will get back to you as soon as possible.');
+
+  twiml.record({
+    maxLength: 180,
+    playBeep: true,
+    recordingStatusCallback: `${baseUrl}/api/voice/incoming/voicemail-complete`,
+    recordingStatusCallbackEvent: 'completed',
+    recordingStatusCallbackMethod: 'POST',
+  });
+
+  twiml.say('We did not receive a message. Goodbye.');
+
+  res.type('text/xml').send(twiml.toString());
+});
+
+// POST /api/voice/incoming/voicemail-complete — saves voicemail recording URL to the call record
+const vmCompleteWebhook = twilio.webhook({
+  validate: process.env.NODE_ENV === 'production',
+  url: `${baseUrl}/api/voice/incoming/voicemail-complete`,
+});
+
+router.post('/voicemail-complete', vmCompleteWebhook, async (req, res) => {
+  res.sendStatus(204);
+
+  const { RecordingUrl, RecordingSid, RecordingDuration, CallSid } = req.body;
+  if (!RecordingUrl) return;
+
+  console.log(`incoming: voicemail recorded (${RecordingDuration}s) — ${RecordingSid}`);
+
+  try {
+    await pool.query(
+      `UPDATE nucleus_phone_calls
+       SET recording_url = $1, status = 'voicemail'
+       WHERE caller_call_sid = $2`,
+      [RecordingUrl, CallSid]
+    );
+
+    // Notify via Slack
+    sendSlackAlert({
+      text: `:mailbox_with_mail: Voicemail received (${RecordingDuration}s) — check call history for recording`,
+    }).catch(() => {});
+  } catch (err) {
+    console.error('incoming: voicemail save failed:', err.message);
+  }
+});
 
 module.exports = router;

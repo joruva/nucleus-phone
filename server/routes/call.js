@@ -265,14 +265,26 @@ router.post('/status', twilioWebhook, async (req, res) => {
     }
 
     if (conf.leadPhone && claimLeadDial(FriendlyName)) {
+      const isInbound = FriendlyName.startsWith('nucleus-inbound-');
       try {
-        await client.conferences(ConferenceSid).participants.create({
+        const participantOpts = {
           from: process.env.NUCLEUS_PHONE_NUMBER,
           to: conf.leadPhone,
           earlyMedia: true,
           beep: false,
-          endConferenceOnExit: true,
-        });
+          endConferenceOnExit: !isInbound,
+        };
+
+        // For inbound calls: monitor the rep's leg so we can redirect
+        // the caller to voicemail if the rep doesn't answer.
+        if (isInbound) {
+          participantOpts.statusCallback = `${baseUrl}/api/voice/incoming/rep-status?conf=${encodeURIComponent(FriendlyName)}`;
+          participantOpts.statusCallbackEvent = 'initiated ringing answered completed';
+          participantOpts.statusCallbackMethod = 'POST';
+          participantOpts.timeout = 25;
+        }
+
+        await client.conferences(ConferenceSid).participants.create(participantOpts);
         console.log(`[callback] Dialed ${conf.leadPhone} via ${StatusCallbackEvent} for ${FriendlyName}`);
       } catch (err) {
         console.error('Failed to dial lead into conference:', err.message);
