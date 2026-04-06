@@ -40,6 +40,7 @@ app.use('/api/auth', require('./routes/auth'));
 
 // Routes
 app.use('/api/token', apiKeyAuth, require('./routes/token'));
+app.use('/api/voice/incoming', require('./routes/incoming'));
 app.use('/api/voice', require('./routes/voice'));
 app.use('/api/call', require('./routes/call'));
 app.use('/api/call/recording-status', require('./routes/recording'));
