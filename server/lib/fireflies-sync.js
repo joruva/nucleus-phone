@@ -83,11 +83,27 @@ async function updateSyncTime(timestamp) {
 
 /**
  * 3-layer dedup check.
- * Returns true if this transcript is a duplicate.
+ * Returns:
+ *   { skip: true } — true duplicate, skip entirely
+ *   { skip: false, enrichId: null } — new transcript, create row
+ *   { skip: false, enrichId: number } — NPC upload, enrich existing row with AI data
  */
-async function isDuplicate(transcript) {
-  // Layer 1: Title matches nucleus-phone upload pattern
-  if (NPC_TITLE_PATTERN.test(transcript.title)) return true;
+async function checkDedup(transcript) {
+  // Layer 1: Title matches nucleus-phone upload pattern → enrich existing row
+  if (NPC_TITLE_PATTERN.test(transcript.title)) {
+    const tDate = new Date(transcript.date);
+    const { rows: npcRows } = await pool.query(`
+      SELECT id FROM customer_interactions
+      WHERE session_id LIKE 'npc_%'
+        AND created_at BETWEEN $1 AND $2
+      LIMIT 1
+    `, [
+      new Date(tDate.getTime() - DEDUP_WINDOW_MINUTES * 60000),
+      new Date(tDate.getTime() + DEDUP_WINDOW_MINUTES * 60000),
+    ]);
+    // Enrich the existing NPC row with AI analysis, or skip if no match
+    return { skip: !npcRows.length, enrichId: npcRows[0]?.id || null };
+  }
 
   const tDate = new Date(transcript.date);
 
@@ -101,16 +117,16 @@ async function isDuplicate(transcript) {
     new Date(tDate.getTime() - DEDUP_WINDOW_MINUTES * 60000),
     new Date(tDate.getTime() + DEDUP_WINDOW_MINUTES * 60000),
   ]);
-  if (npcRows.length) return true;
+  if (npcRows.length) return { skip: true };
 
   // Layer 3: Already synced this exact Fireflies transcript
   const { rows: ffRows } = await pool.query(
     `SELECT id FROM customer_interactions WHERE session_id = $1`,
     [`ff_${transcript.id}`]
   );
-  if (ffRows.length) return true;
+  if (ffRows.length) return { skip: true };
 
-  return false;
+  return { skip: false, enrichId: null };
 }
 
 function extractPhoneFromParticipants(participants) {
@@ -207,7 +223,8 @@ async function sync() {
 
   for (const transcript of relevant) {
     try {
-      if (await isDuplicate(transcript)) {
+      const dedup = await checkDedup(transcript);
+      if (dedup.skip) {
         skipped++;
         continue;
       }
@@ -217,33 +234,57 @@ async function sync() {
       const transcriptText = buildTranscriptText(transcript.sentences);
       const analysis = transcriptText ? await analyzeTranscript(transcriptText) : null;
 
-      // Identity resolution (best-effort)
-      let identity = null;
-      if (phone) {
-        try { identity = await resolve(phone); } catch { /* noop */ }
-      }
+      if (dedup.enrichId) {
+        // NPC upload — enrich existing customer_interactions row with AI analysis
+        await pool.query(`
+          UPDATE customer_interactions SET
+            transcript = COALESCE($1, transcript),
+            summary = CASE WHEN $2 IS NOT NULL THEN $2 ELSE summary END,
+            products_discussed = CASE WHEN $3::jsonb != '[]'::jsonb THEN $3 ELSE products_discussed END,
+            sentiment = COALESCE($4, sentiment),
+            competitive_intel = COALESCE($5, competitive_intel),
+            source_metadata = source_metadata || $6::jsonb
+          WHERE id = $7
+        `, [
+          transcriptText || null,
+          analysis?.summary || null,
+          JSON.stringify(analysis?.products_discussed || []),
+          analysis?.sentiment ? JSON.stringify({ overall: analysis.sentiment }) : null,
+          analysis?.competitive_mentions?.length
+            ? JSON.stringify({ mentions: analysis.competitive_mentions }) : null,
+          JSON.stringify({ firefliesId: transcript.id, firefliesTitle: transcript.title }),
+          dedup.enrichId,
+        ]);
+        console.log(`Fireflies enriched NPC row ${dedup.enrichId} from transcript ${transcript.id}`);
+      } else {
+        // New transcript — create customer_interactions row
+        let identity = null;
+        if (phone) {
+          try { identity = await resolve(phone); } catch { /* noop */ }
+        }
 
-      await syncInteraction({
-        channel: 'voice',
-        direction: 'inbound',
-        sessionId: `ff_${transcript.id}`,
-        phone: phone || null,
-        contactName: identity?.name || null,
-        companyName: identity?.company || null,
-        agentName,
-        summary: analysis?.summary || transcript.title,
-        productsDiscussed: analysis?.products_discussed || [],
-        disposition: analysis?.disposition || 'connected',
-        transcript: transcriptText || null,
-        sentiment: analysis?.sentiment ? { overall: analysis.sentiment } : null,
-        competitiveIntel: analysis?.competitive_mentions?.length
-          ? { mentions: analysis.competitive_mentions } : null,
-        sourceMetadata: {
-          firefliesId: transcript.id,
-          title: transcript.title,
-          duration: transcript.duration,
-        },
-      });
+        await syncInteraction({
+          channel: 'voice',
+          direction: 'inbound',
+          sessionId: `ff_${transcript.id}`,
+          phone: phone || null,
+          contactName: identity?.name || null,
+          companyName: identity?.company || null,
+          agentName,
+          summary: analysis?.summary || transcript.title,
+          productsDiscussed: analysis?.products_discussed || [],
+          disposition: analysis?.disposition || 'connected',
+          transcript: transcriptText || null,
+          sentiment: analysis?.sentiment ? { overall: analysis.sentiment } : null,
+          competitiveIntel: analysis?.competitive_mentions?.length
+            ? { mentions: analysis.competitive_mentions } : null,
+          sourceMetadata: {
+            firefliesId: transcript.id,
+            title: transcript.title,
+            duration: transcript.duration,
+          },
+        });
+      }
 
       processed++;
       if (new Date(transcript.date) > new Date(latestDate)) {

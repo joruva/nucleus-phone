@@ -88,7 +88,14 @@ async function resolve(identifier) {
   }
 
   const props = hsContact?.properties || {};
-  let name = [props.firstname, props.lastname].filter(Boolean).join(' ') || null;
+  // Guard: if firstname already ends with lastname, don't double it
+  let name = null;
+  if (props.firstname && props.lastname
+      && props.firstname.toLowerCase().endsWith(props.lastname.toLowerCase())) {
+    name = props.firstname;
+  } else {
+    name = [props.firstname, props.lastname].filter(Boolean).join(' ') || null;
+  }
   let company = props.company || null;
   const phone = normalizePhone(identifier) || normalizePhone(props.phone) || null;
 

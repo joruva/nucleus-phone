@@ -14,7 +14,7 @@ const CALL_COLUMNS = `id, created_at, conference_name, caller_identity, lead_pho
   lead_name, lead_company, hubspot_contact_id, direction, status, duration_seconds,
   disposition, qualification, products_discussed, notes, recording_url,
   recording_duration, fireflies_uploaded, lead_email, follow_up_email_sent,
-  follow_up_email_error`;
+  follow_up_email_error, ai_summary, ai_action_items, transcript`;
 
 // GET /api/history — list past calls
 router.get('/', apiKeyAuth, async (req, res) => {
@@ -159,7 +159,9 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
         .catch((err) => console.error('HubSpot sync failed:', err.message));
     }
 
-    // Sync to customer_interactions (async, non-blocking)
+    // Sync to customer_interactions — include AI data if available
+    const aiSummary = call.ai_summary || null;
+    const aiItems = call.ai_action_items || null;
     syncInteraction({
       channel: 'voice',
       direction: 'outbound',
@@ -169,14 +171,20 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
       companyName: call.lead_company,
       agentName: call.caller_identity,
       recordingUrl: call.recording_url,
-      summary: notes || '',
-      productsDiscussed: products_discussed || [],
+      transcript: call.transcript || null,
+      summary: aiSummary || notes || '',
+      productsDiscussed: aiItems?.products_discussed?.length
+        ? aiItems.products_discussed : (products_discussed || []),
       disposition: qualification === 'hot' ? 'qualified_hot'
         : qualification === 'warm' ? 'qualified_warm'
         : disposition,
       qualification: qualification
         ? { stage: qualification, score: qualification === 'hot' ? 90 : 60 }
         : undefined,
+      sentiment: aiItems?.objections_raised?.length
+        ? { overall: 'mixed', objections: aiItems.objections_raised } : null,
+      competitiveIntel: aiItems?.equipment_mentioned?.length
+        ? { equipment: aiItems.equipment_mentioned } : null,
     }).catch(err => console.error('Interaction sync failed:', err.message));
 
     // ── Follow-up email from rep's mailbox ────────────────────────
