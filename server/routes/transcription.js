@@ -42,7 +42,19 @@ router.use('/', (req, res, next) => {
 router.post('/', twilioWebhook, async (req, res) => {
   res.sendStatus(204);
 
-  const { TranscriptionText, TranscriptionEvent, Track, CallSid } = req.body;
+  const { TranscriptionText, TranscriptionData, TranscriptionEvent, Track, CallSid } = req.body;
+
+  // Voice Intelligence sends transcript in TranscriptionData (JSON string),
+  // older RT Transcription uses TranscriptionText (plain text).
+  let transcriptText = TranscriptionText || null;
+  if (!transcriptText && TranscriptionData) {
+    try {
+      const parsed = JSON.parse(TranscriptionData);
+      transcriptText = parsed.transcript || parsed.text || TranscriptionData;
+    } catch {
+      transcriptText = TranscriptionData; // plain text fallback
+    }
+  }
 
   // Twilio sends transcription-stopped when all chunks are delivered —
   // trigger post-call summarization here instead of racing in recording.js.
@@ -55,7 +67,7 @@ router.post('/', twilioWebhook, async (req, res) => {
     return;
   }
 
-  if (!TranscriptionText || !CallSid) return;
+  if (!transcriptText || !CallSid) return;
 
   // Look up call by caller_call_sid
   let call;
@@ -83,7 +95,7 @@ router.post('/', twilioWebhook, async (req, res) => {
       `UPDATE nucleus_phone_calls
        SET transcript = COALESCE(transcript, '') || $1 || E'\\n'
        WHERE id = $2`,
-      [TranscriptionText, call.id]
+      [transcriptText, call.id]
     );
   } catch (err) {
     console.error('transcription: transcript accumulation failed:', err.message);
@@ -92,7 +104,7 @@ router.post('/', twilioWebhook, async (req, res) => {
   // Broadcast raw transcript chunk
   broadcast(callId, {
     type: 'transcript_chunk',
-    data: { text: TranscriptionText, speaker: Track || 'unknown' },
+    data: { text: transcriptText, speaker: Track || 'unknown' },
   });
 
   // Run entity extraction pipeline (fire-and-forget, don't block)
