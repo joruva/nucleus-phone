@@ -54,6 +54,7 @@ router.post('/', twilioWebhook, async (req, res) => {
       statusCallbackUrl: `${baseUrl}/api/transcription`,
       track: 'both_tracks',
       languageCode: 'en-US',
+      intelligenceService: process.env.TWILIO_INTELLIGENCE_SERVICE_SID || undefined,
     });
 
     const dial = twiml.dial({ callerId: process.env.NUCLEUS_PHONE_NUMBER });
