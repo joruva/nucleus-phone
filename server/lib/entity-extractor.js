@@ -15,11 +15,13 @@ const FETCH_TIMEOUT = 5000;
 // Pre-filter: triggers Claude extraction only when transcript likely mentions equipment.
 // False positives are acceptable (Claude sorts them out) but cost API money.
 // Uses \b word boundaries on short/ambiguous words to reduce false matches.
-const EQUIPMENT_KEYWORDS = /haas|mazak|bridgeport|fanuc|\bcnc\b|grizzly|\bpiston\b|\brecip\b|\brotary\b|\bdryer\b|\bbooth\b|\bblast\b|erector|pearson|packaging|doosan|okuma|hurco|kitamura|dmg|mori|laguna|thermwood|shopbot|wexxar|loveshaw|\bhvlp\b|\bsander\b|clemco|schmidt|\bsata\b|devilbiss|iwata|dynabrade/i;
+const EQUIPMENT_KEYWORDS = /haas|mazak|bridgeport|fanuc|\bcnc\b|grizzly|\bpiston\b|\brecip\b|\brotary\b|\bdryer\b|\bbooth\b|\bblast\b|erector|pearson|packaging|doosan|okuma|hurco|kitamura|dmg|mori|laguna|thermwood|shopbot|wexxar|loveshaw|\bhvlp\b|\bsander\b|clemco|schmidt|\bsata\b|devilbiss|iwata|dynabrade|atlas.copco|kaeser|ingersoll|sullair|quincy|gardner.denver|fs.curtis|campbell|kaishan|elgi|kobelco|hitachi|\bcompressor\b/i;
 
-const SYSTEM_PROMPT = `You extract equipment mentions from sales call transcripts. The caller sells compressed air systems and the prospect uses industrial equipment.
+const SYSTEM_PROMPT = `You extract equipment mentions from sales call transcripts. The caller sells compressed air systems (compressors, dryers, filters) and the prospect uses industrial equipment that consumes compressed air.
 
-Given a transcript chunk, identify ALL equipment mentioned. For each piece of equipment, extract:
+Your job is to identify the PROSPECT'S equipment — the machines they already own or operate. Do NOT extract compressed air products being recommended, quoted, or discussed as potential purchases. The prospect's equipment drives the air demand sizing; the products being sold are the OUTPUT of that sizing, not inputs to it.
+
+For each piece of prospect equipment, extract:
 - manufacturer: The equipment brand/manufacturer
 - model: The specific model number or name
 - count: How many units mentioned (default 1)
@@ -30,6 +32,11 @@ If the transcript mentions a brand without a specific model (e.g. "we run Haas")
 Respond with ONLY a valid JSON array. No markdown fences, no explanation.
 Example: [{"manufacturer":"Haas","model":"VF-2","count":3,"raw_mention":"three Haas VF-2s"}]
 If no equipment is mentioned, respond with: []`;
+
+// Hard filter: CAS product model prefixes that must never enter the sizing pipeline.
+// These are the products being SOLD, not the prospect's equipment.
+const CAS_MODEL_PREFIX = /^(JRS|JVSD|JLF|JRD|JDD|JPF|JCF|OWS)/i;
+const CAS_MANUFACTURERS = /^(cas|compressed air systems?|joruva)/i;
 
 /**
  * Extract equipment mentions from transcript text.
@@ -85,12 +92,18 @@ async function extractEquipment(text) {
     const parsed = JSON.parse(cleaned);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.map(item => ({
-      manufacturer: item.manufacturer || null,
-      model: item.model || null,
-      count: Math.max(1, parseInt(item.count, 10) || 1),
-      raw_mention: item.raw_mention || '',
-    }));
+    return parsed
+      .map(item => ({
+        manufacturer: item.manufacturer || null,
+        model: item.model || null,
+        count: Math.max(1, parseInt(item.count, 10) || 1),
+        raw_mention: item.raw_mention || '',
+      }))
+      .filter(item => {
+        if (item.model && CAS_MODEL_PREFIX.test(item.model)) return false;
+        if (item.manufacturer && CAS_MANUFACTURERS.test(item.manufacturer)) return false;
+        return true;
+      });
   } catch (err) {
     if (err.name === 'AbortError') {
       console.warn('entity-extractor: timed out');
@@ -105,4 +118,4 @@ async function extractEquipment(text) {
   }
 }
 
-module.exports = { extractEquipment, EQUIPMENT_KEYWORDS };
+module.exports = { extractEquipment, EQUIPMENT_KEYWORDS, CAS_MODEL_PREFIX, CAS_MANUFACTURERS };
