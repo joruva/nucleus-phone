@@ -1,0 +1,17 @@
+{
+  "name": "Large Mixed Manufacturing — Multiple departments",
+  "description": "Large facility with CNC, welding, paint, and assembly. High CFM demand, tests the full sizing range and parallel configuration logic.",
+  "expectedEquipment": ["Haas UMC-750", "DMG Mori NLX 2500", "Okuma GENOS M560", "Fanuc Roboshot", "Grizzly G0766", "Miller Dynasty 400"],
+  "expectedDemandRange": { "minCfm": 150, "maxCfm": 400 },
+  "chunks": [
+    "We're about 80,000 square feet, four main departments.",
+    "CNC department has a Haas UMC-750 five-axis, that's our newest machine.",
+    "Two DMG Mori NLX 2500 lathes that run lights-out on weekends.",
+    "And an Okuma GENOS M560 vertical mill, that one's been reliable.",
+    "Molding department has two Fanuc Roboshot injection machines, those are all electric but the mold clamps use air.",
+    "In the tool room we've got a Grizzly G0766 surface grinder and a manual lathe.",
+    "Welding shop runs Miller Dynasty 400 TIG welders, the purge gas is separate but they use air for the plasma cutter.",
+    "Oh and I forgot, the loading dock has a stretch wrapper and two air hoists for material handling.",
+    "We're probably pushing 200 CFM on a busy day. Current setup is two old recip compressors daisy-chained together."
+  ]
+}

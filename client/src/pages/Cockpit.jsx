@@ -24,6 +24,7 @@ import CareerContext from '../components/cockpit/CareerContext';
 import CompanyVernacular from '../components/cockpit/CompanyVernacular';
 import DataSourceIndicator from '../components/ui/DataSourceIndicator';
 import useLiveAnalysis from '../hooks/useLiveAnalysis';
+import TestScenarioButton from '../components/cockpit/TestScenarioButton';
 
 function deriveCallPhase(twilioStatus, callData) {
   if (twilioStatus === 'connecting' || twilioStatus === 'ringing' || twilioStatus === 'connected')
@@ -83,7 +84,12 @@ function dataSources(d) {
   };
 }
 
-function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
+function isTestCompany(d) {
+  const company = (d.identity?.company || '').toLowerCase();
+  return company.includes('joruva');
+}
+
+function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId, testCallId, onTestCallId }) {
   return (
     <>
       {/* Contact identity + signal context — ship status bar */}
@@ -114,8 +120,22 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId }) {
         {/* CENTER — Viewscreen fills height, Company Intel anchored to bottom */}
         <div className="min-w-0 flex flex-col">
           <div className="cockpit-viewscreen">
-            <LiveAnalysis data={liveAnalysis} active={callPhase === 'active'} contact={d.identity} callId={liveCallId} isPractice={false} />
+            <LiveAnalysis data={liveAnalysis} active={callPhase === 'active' || !!testCallId} contact={d.identity} callId={liveCallId} isPractice={false} />
           </div>
+          {isTestCompany(d) && (
+            <div className="flex items-center gap-2 mt-1">
+              <TestScenarioButton onCallIdReady={onTestCallId} />
+              {testCallId && (
+                <button
+                  onClick={() => onTestCallId(null)}
+                  className="text-[11px] px-2 py-1 rounded"
+                  style={{ color: 'var(--cockpit-text-muted)', background: 'var(--cockpit-card)', border: '1px solid var(--cockpit-card-border)' }}
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          )}
           <div className="mt-auto">
             <CompanyVernacular vernacular={d.companyVernacular} />
             <CompanyIntel
@@ -158,14 +178,16 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
   const practiceBoard = usePracticeScoreboard(isPractice);
   const [historyKey, setHistoryKey] = useState(0);
   const [activeSimCallId, setActiveSimCallId] = useState(null);
+  const [testCallId, setTestCallId] = useState(null);
 
   const callPhase = deriveCallPhase(twilioStatus, callState.callData);
 
-  // Live analysis: subscribe by practice sim ID or real call conference name
-  const liveCallId = isPractice
-    ? (activeSimCallId ? `sim-${activeSimCallId}` : null)
-    : callState.callData?.conferenceName || null;
-  const liveAnalysis = useLiveAnalysis(liveCallId, callPhase === 'active' || !!activeSimCallId);
+  // Live analysis: subscribe by test scenario, practice sim ID, or real call conference name
+  const liveCallId = testCallId
+    || (isPractice
+      ? (activeSimCallId ? `sim-${activeSimCallId}` : null)
+      : callState.callData?.conferenceName || null);
+  const liveAnalysis = useLiveAnalysis(liveCallId, !!testCallId || callPhase === 'active' || !!activeSimCallId);
 
   // Find current user's practice stats from the leaderboard
   const myPracticeStats = practiceBoard.data?.leaderboard?.find(e => e.identity === identity);
@@ -293,6 +315,8 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId })
                 callPhase={callPhase}
                 liveAnalysis={liveAnalysis}
                 liveCallId={liveCallId}
+                testCallId={testCallId}
+                onTestCallId={setTestCallId}
               />
             )}
           </div>

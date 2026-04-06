@@ -1,5 +1,7 @@
 const { Router } = require('express');
 const { pool } = require('../db');
+const { processEquipmentChunk } = require('../lib/equipment-pipeline');
+const { broadcast, cleanupCall } = require('../lib/live-analysis');
 
 const router = Router();
 
@@ -73,6 +75,31 @@ router.get('/sightings', async (req, res) => {
     console.error('equipment sightings error:', err.message);
     res.status(500).json({ error: 'Query failed' });
   }
+});
+
+// POST /api/equipment/test-scenario — feed transcript chunks through the pipeline
+// and broadcast to WebSocket so the cockpit UI shows live detections.
+// Body: { chunks: string[], callId?: string, delayMs?: number }
+router.post('/test-scenario', async (req, res) => {
+  const { chunks, callId: customCallId, delayMs = 800 } = req.body;
+  if (!Array.isArray(chunks) || chunks.length === 0) {
+    return res.status(400).json({ error: 'chunks[] required' });
+  }
+
+  const callId = customCallId || `test-${Date.now()}`;
+  const delay = Math.min(Math.max(parseInt(delayMs, 10) || 800, 0), 5000);
+
+  // Return the callId immediately so the cockpit can subscribe
+  res.json({ callId, chunkCount: chunks.length, delayMs: delay });
+
+  // Drip-feed chunks in the background
+  for (const chunk of chunks) {
+    await processEquipmentChunk(callId, 'test', '0', chunk);
+    if (delay > 0) await new Promise(r => setTimeout(r, delay));
+  }
+
+  // Signal completion
+  broadcast(callId, { type: 'test_complete', data: { chunks: chunks.length } });
 });
 
 // NOTE: Parameterized routes (/:id) must come AFTER static paths (/search, /unverified, /sightings)

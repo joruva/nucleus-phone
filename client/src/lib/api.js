@@ -149,3 +149,10 @@ export function getPracticeScores(identity) {
 export function getPracticeScoreboard(signal) {
   return apiFetch('/sim/scoreboard', { signal });
 }
+
+export function runTestScenario(chunks, delayMs = 800) {
+  return apiFetch('/equipment/test-scenario', {
+    method: 'POST',
+    body: JSON.stringify({ chunks, delayMs }),
+  });
+}

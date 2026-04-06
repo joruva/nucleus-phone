@@ -1,0 +1,15 @@
+{
+  "name": "Packaging Line — High volume pneumatic actuators",
+  "description": "Food packaging facility with multiple pneumatic packaging machines. High duty cycle, moderate CFM per machine but many units.",
+  "expectedEquipment": ["Wexxar WF-2", "Loveshaw LD-16", "Pearson CE25-T", "Nordson ProBlue"],
+  "expectedDemandRange": { "minCfm": 80, "maxCfm": 160 },
+  "chunks": [
+    "We run three packaging lines, pretty much 16 hours a day.",
+    "Each line has a Wexxar case erector, the WF-2 model, those use a surprising amount of air.",
+    "Then Loveshaw LD-16 case sealers on the end of each line.",
+    "Line one has a Pearson CE25-T palletizer that's pneumatic, that's our biggest air hog.",
+    "We've also got Nordson ProBlue hot melt units but those are electric, shouldn't affect air right?",
+    "The whole plant runs off a 30 horse Sullair that's been here since we moved in.",
+    "We're adding a fourth line next quarter so we need to size for that too."
+  ]
+}

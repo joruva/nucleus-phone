@@ -1,0 +1,15 @@
+{
+  "name": "Woodworking Shop — CNC router + manual tools",
+  "description": "Cabinet shop with CNC router and pneumatic hand tools. Lower pressure requirements, moderate CFM.",
+  "expectedEquipment": ["Thermwood Model 45", "ShopBot PRSalpha", "Dynabrade 69505", "Iwata LPH-400"],
+  "expectedDemandRange": { "minCfm": 30, "maxCfm": 70 },
+  "chunks": [
+    "We're a custom cabinet shop, do a lot of high-end residential work.",
+    "Our main machine is a Thermwood Model 45 CNC router, five by ten table.",
+    "We also have a ShopBot PRSalpha for simpler nested parts.",
+    "The guys use Dynabrade 69505 random orbit sanders all day, probably four of those going at once.",
+    "And we've got a small spray room with Iwata LPH-400 guns for lacquer and conversion varnish.",
+    "Running a piston compressor right now, I think it's a 7.5 horse Campbell Hausfeld.",
+    "It cycles constantly and we get moisture in the spray guns, ruins the finish."
+  ]
+}

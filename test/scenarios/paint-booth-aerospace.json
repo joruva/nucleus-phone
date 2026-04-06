@@ -1,0 +1,15 @@
+{
+  "name": "Paint Booth + Aerospace — ISO 8573 air quality",
+  "description": "Aerospace tier 2 with paint booths and AS9100 requirements. Should trigger desiccant dryer and high-quality filtration recommendations.",
+  "expectedEquipment": ["Devilbiss GTi Pro", "SATA Jet 5000", "Clemco 1028", "Nordson Encore"],
+  "expectedDemandRange": { "minCfm": 60, "maxCfm": 120 },
+  "chunks": [
+    "We do aerospace coatings, mostly primer and topcoat on aluminum parts.",
+    "Main booth has two painters running Devilbiss GTi Pro guns, those pull about 12 CFM each.",
+    "Second booth is SATA, couple SATA Jet 5000s, similar air draw.",
+    "We also run a small Clemco 1028 blast cabinet for surface prep before prime.",
+    "And a Nordson Encore powder coating unit on the other line.",
+    "Air quality is critical for us, any moisture or oil and we're scrapping parts. We're AS9100 certified.",
+    "Current compressor is a 25 horse Ingersoll Rand UP6, it's been solid but we're adding the powder line."
+  ]
+}

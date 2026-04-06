@@ -1,0 +1,16 @@
+{
+  "name": "Compressor Replacement — Atlas Copco trade-out",
+  "description": "Prospect replacing an aging Atlas Copco GA30 and Kaeser ASD 40. Competitor compressor mentions should be detected as prospect equipment, CAS products discussed as replacements should NOT.",
+  "expectedEquipment": ["Atlas Copco GA30", "Kaeser ASD 40"],
+  "expectedFiltered": ["JRS-30", "JRD-100"],
+  "expectedDemandRange": { "minCfm": 100, "maxCfm": 250 },
+  "chunks": [
+    "We've got two compressors right now, an Atlas Copco GA30 that's about twelve years old.",
+    "And a Kaeser ASD 40 that we bought used maybe five years ago.",
+    "The Atlas Copco is giving us problems, high oil carryover, and the maintenance costs are killing us.",
+    "The Kaeser still runs fine but it's oversized for what we need on second shift.",
+    "I'd like to look at replacing both with one good rotary screw unit.",
+    "I think something like the JRS-30 with a JRD-100 dryer would be a good fit for your demand.",
+    "What kind of pressure are you running? We need about 110 PSI at the header."
+  ]
+}

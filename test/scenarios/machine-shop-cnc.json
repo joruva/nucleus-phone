@@ -1,0 +1,14 @@
+{
+  "name": "Machine Shop — 4 CNC + manual equipment",
+  "description": "Mid-size job shop with Haas and Mazak CNC machines, manual Bridgeport mill, and a sandblast cabinet. Typical 50-80 CFM demand.",
+  "expectedEquipment": ["Haas VF-2", "Haas VF-4", "Mazak QTN-200", "Bridgeport", "Clemco 2452"],
+  "expectedDemandRange": { "minCfm": 40, "maxCfm": 90 },
+  "chunks": [
+    "Yeah so we've got four CNC machines on the floor right now.",
+    "Two of them are Haas, a VF-2 and a VF-4. Both running pretty much all day.",
+    "Then we've got a Mazak QTN-200 lathe, that one's probably our busiest machine.",
+    "And an old Bridgeport manual mill that we still use for one-offs.",
+    "We also have a Clemco 2452 blast cabinet in the back for finishing work.",
+    "Everything runs off one compressor right now and I think we're starving the CNCs on pressure."
+  ]
+}
