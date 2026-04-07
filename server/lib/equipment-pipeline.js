@@ -62,9 +62,11 @@ function getCategoryDefault(entity) {
     return { ...CATEGORY_DEFAULTS.cnc, confidence: 'category_default' };
   }
 
-  // Match keywords in the combined text
+  // Match keywords with word boundaries to avoid false positives
+  // (e.g., "press" must not match "compressor" or "impressive")
   for (const [keyword, defaults] of Object.entries(CATEGORY_DEFAULTS)) {
-    if (text.includes(keyword)) {
+    const re = new RegExp(`\\b${keyword}\\b`, 'i');
+    if (re.test(text)) {
       return { ...defaults, confidence: 'category_default' };
     }
   }

@@ -1,7 +1,7 @@
 const { Router } = require('express');
 const { pool } = require('../db');
 const { processEquipmentChunk } = require('../lib/equipment-pipeline');
-const { broadcast, cleanupCall } = require('../lib/live-analysis');
+const { broadcast } = require('../lib/live-analysis');
 
 const router = Router();
 

@@ -246,7 +246,7 @@ async function sync() {
             products_discussed = CASE WHEN $3::jsonb != '[]'::jsonb THEN $3 ELSE products_discussed END,
             sentiment = COALESCE($4::jsonb, sentiment),
             competitive_intel = COALESCE($5::jsonb, competitive_intel),
-            source_metadata = COALESCE(source_metadata, '{}'::jsonb) || $6::jsonb
+            source_metadata = COALESCE(source_metadata, '{}'::jsonb) || COALESCE($6::jsonb, '{}'::jsonb)
           WHERE id = $7
         `, [
           transcriptText || null,

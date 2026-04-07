@@ -55,7 +55,8 @@ function toE164(phone) {
   if (phone.startsWith('+')) return phone;
   if (phone.length === 10) return `+1${phone}`;
   if (phone.length === 11 && phone.startsWith('1')) return `+${phone}`;
-  return phone; // Don't guess country code for unknown lengths
+  console.warn('toE164: unexpected phone length', phone.length, phone);
+  return null; // Unknown format — return null rather than non-E.164 string
 }
 
 /**
