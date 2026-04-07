@@ -132,13 +132,15 @@ export default function useTwilioDevice(identity) {
 
   const toggleMute = useCallback(() => {
     if (call) {
-      const newMuted = !muted;
-      call.mute(newMuted);
-      setMuted(newMuted);
-      return newMuted;
+      // Read from the Twilio Call object, not React state — avoids stale
+      // closure when rapid double-taps outpace React renders.
+      const nowMuted = call.isMuted();
+      call.mute(!nowMuted);
+      setMuted(!nowMuted);
+      return !nowMuted;
     }
     return false;
-  }, [call, muted]);
+  }, [call]);
 
   // Reset mute state when call ends
   useEffect(() => {

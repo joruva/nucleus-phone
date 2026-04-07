@@ -30,6 +30,7 @@ const { sendSlackAlert, sendSlackDM } = require('../lib/slack');
 const router = Router();
 
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
+const REP_SLACK_DM = REP_SLACK_DM;
 
 function makeTwilioWebhook(path) {
   return twilio.webhook({
@@ -168,7 +169,7 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
     text: `:telephone_receiver: Inbound call from ${callerPhone} — dialing rep`,
   }).catch(() => {});
 
-  const repSlackChannel = process.env.INBOUND_REP_SLACK_DM;
+  const repSlackChannel = REP_SLACK_DM;
   if (repSlackChannel) {
     sendSlackDM(repSlackChannel,
       `:telephone_receiver: Inbound call from ${callerPhone}\n<${cockpitUrl}|Open Cockpit>`
@@ -279,7 +280,7 @@ router.post('/voicemail-complete', makeTwilioWebhook('/api/voice/incoming/voicem
       text: `:mailbox_with_mail: Voicemail from ${callerPhone} (${RecordingDuration}s) — check call history`,
     }).catch(() => {});
 
-    const repDm = process.env.INBOUND_REP_SLACK_DM;
+    const repDm = REP_SLACK_DM;
     if (repDm) {
       sendSlackDM(repDm,
         `:mailbox_with_mail: Voicemail from ${callerPhone} (${RecordingDuration}s) — check call history`

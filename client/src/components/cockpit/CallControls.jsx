@@ -1,10 +1,36 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { formatTime } from '../../lib/format';
 
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
 export default function CallControls({ callPhase, timer, onCallNow, onEndCall, onSaveNext, disabled, onSendDigits, onToggleMute, muted }) {
   const [showKeypad, setShowKeypad] = useState(false);
+  const keypadRef = useRef(null);
+  const toggleRef = useRef(null);
+
+  // Close keypad on outside click or Escape
+  useEffect(() => {
+    if (!showKeypad) return;
+    function handleClick(e) {
+      if (keypadRef.current?.contains(e.target)) return;
+      if (toggleRef.current?.contains(e.target)) return;
+      setShowKeypad(false);
+    }
+    function handleKey(e) {
+      if (e.key === 'Escape') setShowKeypad(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [showKeypad]);
+
+  // Close keypad when call ends
+  useEffect(() => {
+    if (callPhase !== 'active') setShowKeypad(false);
+  }, [callPhase]);
 
   return (
     <div
@@ -18,6 +44,7 @@ export default function CallControls({ callPhase, timer, onCallNow, onEndCall, o
       {/* Keypad popup — anchored above footer */}
       {showKeypad && callPhase === 'active' && (
         <div
+          ref={keypadRef}
           className="absolute left-1/2 -translate-x-1/2 rounded-lg shadow-lg p-4"
           style={{
             bottom: '100%',
@@ -30,13 +57,15 @@ export default function CallControls({ callPhase, timer, onCallNow, onEndCall, o
             {DIGITS.map((d) => (
               <button
                 key={d}
-                onClick={() => onSendDigits?.(d)}
+                onClick={() => onSendDigits(d)}
                 className="w-14 h-14 rounded-lg text-lg font-medium flex items-center justify-center transition-colors cursor-pointer"
                 style={{
                   background: 'var(--cockpit-card)',
                   border: '1px solid var(--cockpit-card-border)',
                   color: 'var(--cockpit-text)',
                 }}
+                // Prevent focus steal so the keypad stays interactive without
+                // triggering blur/refocus on the parent container
                 onMouseDown={(e) => e.preventDefault()}
               >
                 {d}
@@ -89,6 +118,7 @@ export default function CallControls({ callPhase, timer, onCallNow, onEndCall, o
 
             {/* Keypad toggle */}
             <button
+              ref={toggleRef}
               onClick={() => setShowKeypad(!showKeypad)}
               className="w-10 h-10 rounded-full flex items-center justify-center transition-colors cursor-pointer shrink-0"
               style={{
