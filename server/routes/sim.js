@@ -424,7 +424,7 @@ router.post('/call/:id/rescore', sessionAuth, async (req, res) => {
   );
 
   // Run scoring synchronously for rescore (admin is waiting)
-  const result = await scoreTranscript(rows[0].transcript, rows[0].difficulty);
+  const result = await scoreTranscript(rows[0].transcript, rows[0].difficulty, rows[0].caller_identity);
   if (result.error) {
     await pool.query(
       "UPDATE sim_call_scores SET status = 'score-failed' WHERE id = $1",
@@ -578,7 +578,7 @@ router.post('/webhook', async (req, res) => {
       return;
     }
 
-    const result = await scoreTranscript(transcript, row.difficulty);
+    const result = await scoreTranscript(transcript, row.difficulty, row.caller_identity);
     if (result.error) {
       console.error(`sim scoring failed for ${vapiCallId}:`, result.message);
       await pool.query("UPDATE sim_call_scores SET status = 'score-failed' WHERE id = $1", [row.id]);

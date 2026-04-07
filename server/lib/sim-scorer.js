@@ -7,6 +7,11 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 const SCORE_TIMEOUT = 60000;
 
+const team = require('../config/team.json');
+const TEAM_BY_IDENTITY = Object.fromEntries(
+  team.members.map(m => [m.identity, m])
+);
+
 // Weights must sum to 1.0: 0.20 + 0.25 + 0.25 + 0.15 + 0.15 = 1.00
 const WEIGHTS = { rapport: 0.20, discovery: 0.25, objection: 0.25, product: 0.15, close: 0.15 };
 
@@ -58,12 +63,18 @@ function computeGrade(overall) {
  * Returns { scores, notes, overall, grade, topStrength, topImprovement } on success,
  * or { error: true, message } on failure.
  */
-async function scoreTranscript(transcript, difficulty) {
+async function scoreTranscript(transcript, difficulty, callerIdentity) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { error: true, message: 'ANTHROPIC_API_KEY not set' };
   if (!transcript || transcript.trim().length < 20) {
     return { error: true, message: 'Transcript too short to score' };
   }
+
+  // Inject rep's name and pronouns so coaching outputs use correct gender
+  const member = callerIdentity ? TEAM_BY_IDENTITY[callerIdentity] : null;
+  const repContext = member
+    ? `\n\nThe rep's name is ${member.name} (${member.pronouns}). Use these pronouns in all coaching outputs.`
+    : '';
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SCORE_TIMEOUT);
@@ -80,7 +91,7 @@ async function scoreTranscript(transcript, difficulty) {
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 2048,
-        system: SYSTEM_PROMPT,
+        system: SYSTEM_PROMPT + repContext,
         messages: [{
           role: 'user',
           content: `Score this ${difficulty}-difficulty practice call transcript:\n\n${transcript}`,
