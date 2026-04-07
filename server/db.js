@@ -292,6 +292,7 @@ async function initSchema() {
         updated_at TIMESTAMPTZ DEFAULT NOW()
       );
     `);
+    await client.query(`ALTER TABLE msal_token_cache ADD COLUMN IF NOT EXISTS home_account_id TEXT`);
 
     // Follow-up email columns on nucleus_phone_calls
     await client.query(`
