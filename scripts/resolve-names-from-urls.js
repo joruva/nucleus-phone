@@ -13,33 +13,69 @@ const { pool } = require('../server/db');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
-function extractNameFromSlug(slug, firstName) {
+function extractNameFromSlug(slug, firstName, lastInitial) {
   if (!slug || !firstName) return null;
 
   // Remove trailing numbers/disambiguators and title suffixes
   const clean = slug
     .replace(/-[a-f0-9]{6,}$/, '')   // hex disambiguators: -538bb433
     .replace(/-?\d+$/, '')            // numeric disambiguators: -9414114 or 8190
-    .replace(/-(mba|phd|pe|cpa|pmp|cfa|csm|six-sigma|lean|ehs|mfg-leader|plant-manager|strategic-advisor|engineering|mgr|aeromgr)$/i, ''); // title/credential suffixes
+    .replace(/-(mba|phd|pe|cpa|pmp|cfa|csm|cpim|six-sigma|lean|ehs|mfg-leader|plant-manager|strategic-advisor|engineering|mgr|aeromgr)$/i, '') // title/credential suffixes
+    .replace(/(cpim|cscp|cpsm|apics|appm?|fives)$/i, ''); // vanity URL credential/company suffixes
 
-  // Try hyphenated format: "erik-topp" or "kurt-dehnel" or "amir-dehghan"
+  // Build candidate first names: full name + individual words for multi-word names
+  // e.g. "M. Susan" → try "m. susan", "m", "susan"
+  const firstCandidates = [firstName.toLowerCase()];
+  const words = firstName.split(/[\s.]+/).filter(w => w.length >= 2);
+  for (const w of words) {
+    if (!firstCandidates.includes(w.toLowerCase())) firstCandidates.push(w.toLowerCase());
+  }
+
+  const initial = lastInitial.replace('.', '').toLowerCase();
+
+  // Try hyphenated format: "erik-topp" or "kurt-dehnel"
   const parts = clean.split('-');
   if (parts.length >= 2) {
-    const first = parts[0].toLowerCase();
-    if (first === firstName.toLowerCase()) {
-      const last = parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
-      if (last.length >= 2) return { firstName: capitalize(parts[0]), lastName: last };
+    for (const candidate of firstCandidates) {
+      if (parts[0].toLowerCase() === candidate) {
+        const last = parts.slice(1).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ');
+        if (last.length >= 2 && last.toLowerCase().startsWith(initial)) {
+          return { firstName: capitalize(candidate), lastName: last };
+        }
+      }
     }
   }
 
-  // Try concatenated format: "garyeberhart" or "laurenruka"
-  const lower = clean.toLowerCase();
-  const firstLower = firstName.toLowerCase();
-  if (lower.startsWith(firstLower) && lower.length > firstLower.length + 1) {
-    const rest = clean.slice(firstLower.length);
-    // Only accept if the remaining part looks like a name (3+ chars, alpha, no digits)
-    if (rest.length >= 3 && rest.length <= 20 && /^[a-z]+$/i.test(rest)) {
-      return { firstName: capitalize(firstLower), lastName: capitalize(rest) };
+  // Strip digits from slug for concatenated matching: "beckywu98" → "beckywu"
+  const stripped = clean.replace(/\d+/g, '').toLowerCase();
+
+  // Try concatenated format: "garyeberhart", "beckywu", "susanwedemeyer"
+  for (const candidate of firstCandidates) {
+    if (stripped.startsWith(candidate) && stripped.length > candidate.length + 1) {
+      const rest = stripped.slice(candidate.length);
+      if (rest.length >= 3 && rest.length <= 20 && /^[a-z]+$/.test(rest) && rest.startsWith(initial)) {
+        return { firstName: capitalize(candidate), lastName: capitalize(rest) };
+      }
+    }
+  }
+
+  // Try reversed format: "woodruffandrew" = lastName + firstName
+  for (const candidate of firstCandidates) {
+    if (stripped.endsWith(candidate) && stripped.length > candidate.length + 2) {
+      const rest = stripped.slice(0, stripped.length - candidate.length);
+      if (rest.length >= 3 && rest.length <= 20 && /^[a-z]+$/.test(rest) && rest.startsWith(initial)) {
+        return { firstName: capitalize(candidate), lastName: capitalize(rest) };
+      }
+    }
+  }
+
+  // Try first_initial + last_name: "kprivalova" (Ksenia P. → k + privalova)
+  // Slug = first letter of firstName + full lastName. Verify initial matches.
+  const firstInitial = firstName.replace(/[.\s]/g, '')[0]?.toLowerCase();
+  if (firstInitial && stripped.length >= 5 && stripped[0] === firstInitial) {
+    const rest = stripped.slice(1);
+    if (rest.length >= 3 && rest.length <= 20 && /^[a-z]+$/.test(rest) && rest.startsWith(initial)) {
+      return { firstName: capitalize(firstName.split(/[\s.]+/).filter(w => w.length >= 2)[0] || firstName), lastName: capitalize(rest) };
     }
   }
 
@@ -67,7 +103,7 @@ async function main() {
     const slug = url?.match(/linkedin\.com\/in\/([^/?]+)/)?.[1];
     if (!slug) { skipped++; continue; }
 
-    const result = extractNameFromSlug(slug, row.first_name);
+    const result = extractNameFromSlug(slug, row.first_name, row.last_name);
     if (!result) { skipped++; continue; }
 
     const fullName = `${result.firstName} ${result.lastName}`;
