@@ -30,7 +30,7 @@ const { sendSlackAlert, sendSlackDM } = require('../lib/slack');
 const router = Router();
 
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
-const REP_SLACK_DM = REP_SLACK_DM;
+const REP_SLACK_DM = process.env.INBOUND_REP_SLACK_DM;
 
 function makeTwilioWebhook(path) {
   return twilio.webhook({
