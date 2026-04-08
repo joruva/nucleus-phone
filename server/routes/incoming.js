@@ -1,22 +1,16 @@
 /**
- * incoming.js — Handles inbound calls to the Nucleus Phone number.
+ * incoming.js — Handles inbound calls to Nucleus Phone numbers.
  *
  * Routes inbound calls through the same conference architecture as outbound
  * calls so they get recording, RT transcription, Fireflies upload, equipment
  * detection, AI summary, and UCIL sync — the full Nucleus flywheel.
  *
- * Flow:
- *   1. Caller dials (602) 600-0188
- *   2. Twilio hits POST /api/voice/incoming
- *   3. We create a DB row + in-memory conference state
- *   4. TwiML: "Please hold" → caller joins conference with recording + RT transcription
- *   5. Status callback (existing /api/call/status) dials the rep into the conference
- *   6. If rep answers: endConferenceOnExit enabled, full pipeline runs
- *   7. If rep doesn't answer (25s): rep-status redirects caller to voicemail
- *   8. If rep-status redirect fails: <Dial timeout=35> expires, dial-complete
- *      action URL catches the caller and serves voicemail (safety net)
+ * Supports multiple inbound numbers, each forwarding to a different rep.
+ * Routing is configured via INBOUND_ROUTES env var (JSON):
+ *   { "+16026000188": { "forward": "+14803630494", "slack": "D0ANUHRTYCV", "name": "Ryann" },
+ *     "+16029050230": { "forward": "+16027417970", "slack": "", "name": "Paul" } }
  *
- * Config: INBOUND_FORWARD_NUMBER env var (E.164 format).
+ * Falls back to INBOUND_FORWARD_NUMBER for backwards compatibility.
  */
 
 const { Router } = require('express');
@@ -30,7 +24,38 @@ const { sendSlackAlert, sendSlackDM } = require('../lib/slack');
 const router = Router();
 
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
-const REP_SLACK_DM = process.env.INBOUND_REP_SLACK_DM;
+
+// Parse per-number routing config. Each entry maps a Twilio number (E.164)
+// to { forward: E.164, slack: channel/DM ID, name: rep display name }.
+let inboundRoutes = {};
+try {
+  if (process.env.INBOUND_ROUTES) {
+    inboundRoutes = JSON.parse(process.env.INBOUND_ROUTES);
+  }
+} catch (err) {
+  console.error('incoming: failed to parse INBOUND_ROUTES:', err.message);
+}
+
+/**
+ * Resolve which rep to forward to based on the called number.
+ * Returns { forward, slack, name } or null.
+ */
+function resolveRoute(calledNumber) {
+  // Try exact match in INBOUND_ROUTES
+  if (calledNumber && inboundRoutes[calledNumber]) {
+    return inboundRoutes[calledNumber];
+  }
+  // Fallback to legacy single-number config
+  const legacy = process.env.INBOUND_FORWARD_NUMBER;
+  if (legacy) {
+    return {
+      forward: legacy,
+      slack: process.env.INBOUND_REP_SLACK_DM || '',
+      name: 'Rep',
+    };
+  }
+  return null;
+}
 
 function makeTwilioWebhook(path) {
   return twilio.webhook({
@@ -44,14 +69,16 @@ function makeTwilioWebhook(path) {
  * Used by three paths: inline safety net, dial-complete fallback, and
  * rep-status redirect. Kept in one place to avoid drift.
  */
-function appendVoicemailTwiml(twiml, callerPhone) {
+function appendVoicemailTwiml(twiml, callerPhone, repSlack) {
   twiml.say({
     voice: 'Polly.Joanna',
   }, 'Thank you for calling Joruva Industrial. No one is available to take your call right now. Please leave a message after the tone and we will get back to you as soon as possible.');
+  let cbUrl = `${baseUrl}/api/voice/incoming/voicemail-complete?from=${encodeURIComponent(callerPhone)}`;
+  if (repSlack) cbUrl += `&rep_slack=${encodeURIComponent(repSlack)}`;
   twiml.record({
     maxLength: 180,
     playBeep: true,
-    recordingStatusCallback: `${baseUrl}/api/voice/incoming/voicemail-complete?from=${encodeURIComponent(callerPhone)}`,
+    recordingStatusCallback: cbUrl,
     recordingStatusCallbackEvent: 'completed',
     recordingStatusCallbackMethod: 'POST',
   });
@@ -61,14 +88,19 @@ function appendVoicemailTwiml(twiml, callerPhone) {
 // ─── POST / — Initial inbound call handler ──────────────────────────
 
 router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
-  const forwardTo = process.env.INBOUND_FORWARD_NUMBER;
+  const calledNumber = req.body.To || req.body.Called;
+  const route = resolveRoute(calledNumber);
   const twiml = new VoiceResponse();
 
-  if (!forwardTo) {
-    console.error('incoming: INBOUND_FORWARD_NUMBER not set');
+  if (!route) {
+    console.error('incoming: no route for', calledNumber);
     twiml.say('Thank you for calling Joruva. We are currently unavailable. Please try again later.');
     return res.type('text/xml').send(twiml.toString());
   }
+
+  const forwardTo = route.forward;
+  const repName = route.name;
+  const repSlackDm = route.slack;
 
   const callerPhone = req.body.From || 'unknown';
   const callerCallSid = req.body.CallSid;
@@ -81,7 +113,7 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
 
   const conferenceName = `nucleus-inbound-${uuidv4()}`;
 
-  console.log(`incoming: ${callerPhone} calling in — conference ${conferenceName}`);
+  console.log(`incoming: ${callerPhone} → ${repName} (${forwardTo}) — conference ${conferenceName}`);
 
   // Create DB row — same schema as outbound, but direction='inbound' and
   // lead_phone stores the CALLER's number (for identity resolution).
@@ -113,6 +145,8 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
     contactId: null,
     dbRowId,
     direction: 'inbound',
+    repSlackDm: repSlackDm || '',
+    repName: repName || 'Rep',
   });
 
   // Hold message so the caller doesn't hear silence while rep's phone rings
@@ -146,7 +180,7 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
   const dial = twiml.dial({
     callerId: callerPhone,
     timeout: 35,
-    action: `${baseUrl}/api/voice/incoming/dial-complete?conf=${encodeURIComponent(conferenceName)}&from=${encodeURIComponent(callerPhone)}`,
+    action: `${baseUrl}/api/voice/incoming/dial-complete?conf=${encodeURIComponent(conferenceName)}&from=${encodeURIComponent(callerPhone)}&rep_slack=${encodeURIComponent(repSlackDm || '')}`,
   });
   dial.conference({
     record: 'record-from-start',
@@ -162,17 +196,16 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
 
   // Inline voicemail TwiML after <Dial> — tertiary safety net if both
   // the rep-status redirect AND dial-complete action URL somehow fail.
-  appendVoicemailTwiml(twiml, callerPhone);
+  appendVoicemailTwiml(twiml, callerPhone, repSlackDm);
 
   // Slack: alert admin channel + DM the rep with cockpit deep link
   const cockpitUrl = `${baseUrl}/cockpit/${encodeURIComponent(callerPhone)}?conf=${encodeURIComponent(conferenceName)}`;
   sendSlackAlert({
-    text: `:telephone_receiver: Inbound call from ${callerPhone} — dialing rep`,
+    text: `:telephone_receiver: Inbound call from ${callerPhone} → ${repName}`,
   }).catch(() => {});
 
-  const repSlackChannel = REP_SLACK_DM;
-  if (repSlackChannel) {
-    sendSlackDM(repSlackChannel,
+  if (repSlackDm) {
+    sendSlackDM(repSlackDm,
       `:telephone_receiver: Inbound call from ${callerPhone}\n<${cockpitUrl}|Open Cockpit>`
     ).catch(() => {});
   }
@@ -186,13 +219,14 @@ router.post('/dial-complete', makeTwilioWebhook('/api/voice/incoming/dial-comple
   const { DialCallStatus } = req.body;
   const conferenceName = req.query.conf;
   const callerPhone = req.query.from || 'unknown';
+  const repSlack = req.query.rep_slack || '';
   const twiml = new VoiceResponse();
 
   if (DialCallStatus === 'completed') {
     twiml.hangup();
   } else {
     console.log(`incoming: dial-complete fallback (${DialCallStatus}) for ${conferenceName}`);
-    appendVoicemailTwiml(twiml, callerPhone);
+    appendVoicemailTwiml(twiml, callerPhone, repSlack);
   }
 
   res.type('text/xml').send(twiml.toString());
@@ -238,8 +272,9 @@ router.post('/rep-status', makeTwilioWebhook('/api/voice/incoming/rep-status'), 
       return;
     }
 
+    const repSlack = req.query.rep_slack || '';
     await client.calls(callerSid).update({
-      url: `${baseUrl}/api/voice/incoming/voicemail?from=${encodeURIComponent(callerPhone)}`,
+      url: `${baseUrl}/api/voice/incoming/voicemail?from=${encodeURIComponent(callerPhone)}&rep_slack=${encodeURIComponent(repSlack)}`,
       method: 'POST',
     });
 
@@ -253,8 +288,9 @@ router.post('/rep-status', makeTwilioWebhook('/api/voice/incoming/rep-status'), 
 
 router.post('/voicemail', makeTwilioWebhook('/api/voice/incoming/voicemail'), (req, res) => {
   const callerPhone = req.query.from || 'unknown';
+  const repSlack = req.query.rep_slack || '';
   const twiml = new VoiceResponse();
-  appendVoicemailTwiml(twiml, callerPhone);
+  appendVoicemailTwiml(twiml, callerPhone, repSlack);
   res.type('text/xml').send(twiml.toString());
 });
 
@@ -281,7 +317,7 @@ router.post('/voicemail-complete', makeTwilioWebhook('/api/voice/incoming/voicem
       text: `:mailbox_with_mail: Voicemail from ${callerPhone} (${RecordingDuration}s) — check call history`,
     }).catch(() => {});
 
-    const repDm = REP_SLACK_DM;
+    const repDm = req.query.rep_slack || '';
     if (repDm) {
       sendSlackDM(repDm,
         `:mailbox_with_mail: Voicemail from ${callerPhone} (${RecordingDuration}s) — check call history`

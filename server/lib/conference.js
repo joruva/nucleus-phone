@@ -13,6 +13,8 @@ function createConference(conferenceName, data) {
     contactId: data.contactId,
     dbRowId: data.dbRowId,
     direction: data.direction || 'outbound',
+    repSlackDm: data.repSlackDm || '',
+    repName: data.repName || '',
     participants: [],
     leadDialed: false,
   });

@@ -279,7 +279,7 @@ router.post('/status', twilioWebhook, async (req, res) => {
         // For inbound calls: monitor the rep's leg so we can redirect
         // the caller to voicemail if the rep doesn't answer.
         if (isInbound) {
-          participantOpts.statusCallback = `${baseUrl}/api/voice/incoming/rep-status?conf=${encodeURIComponent(FriendlyName)}`;
+          participantOpts.statusCallback = `${baseUrl}/api/voice/incoming/rep-status?conf=${encodeURIComponent(FriendlyName)}&rep_slack=${encodeURIComponent(conf.repSlackDm || '')}`;
           participantOpts.statusCallbackEvent = 'initiated ringing answered completed';
           participantOpts.statusCallbackMethod = 'POST';
           participantOpts.timeout = 25;
