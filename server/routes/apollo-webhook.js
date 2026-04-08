@@ -81,7 +81,7 @@ router.post('/', async (req, res) => {
 
       if (result.rowCount > 0) {
         const row = result.rows[0];
-        console.log(`Apollo phone webhook: updated ${row.full_name} (${row.email}) → ${phone}`);
+        console.log(`Apollo phone webhook: updated contact ${row.id}`);
         totalUpdated += result.rowCount;
       } else {
         console.warn('Apollo phone webhook: UNMATCHED', { apolloId, phone });
@@ -91,8 +91,8 @@ router.post('/', async (req, res) => {
     res.json({ received: true, updated: totalUpdated });
   } catch (err) {
     console.error('Apollo phone webhook error:', err.message);
-    // Don't leak internal errors on this unauthenticated endpoint
-    res.json({ received: true });
+    // Signal failure so Apollo retries, but don't leak internals
+    res.status(500).json({ received: false });
   }
 });
 
