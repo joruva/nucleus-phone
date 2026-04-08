@@ -24,8 +24,9 @@ const router = Router();
 function pickBestPhone(phoneNumbers) {
   if (!Array.isArray(phoneNumbers) || phoneNumbers.length === 0) return null;
 
+  // Apollo docs say type_cd; accept both type_cd and type defensively
   const direct = phoneNumbers.find(p =>
-    (p.type_cd === 'mobile' || p.type_cd === 'direct')
+    (p.type_cd === 'mobile' || p.type_cd === 'direct' || p.type === 'mobile' || p.type === 'direct')
     && p.status_cd !== 'invalid_number',
   );
   if (direct?.sanitized_number) return direct.sanitized_number;
@@ -38,8 +39,9 @@ function pickBestPhone(phoneNumbers) {
 // POST /api/apollo/phone-webhook — Apollo sends phone numbers here
 router.post('/', async (req, res) => {
   try {
-    // TODO: Remove after Phase 0b validation complete
-    console.log('Apollo webhook raw:', JSON.stringify(req.body).substring(0, 500));
+    if (process.env.DEBUG_APOLLO_WEBHOOK) {
+      console.log('Apollo webhook raw:', JSON.stringify(req.body).substring(0, 500));
+    }
 
     const body = req.body;
 
@@ -57,8 +59,12 @@ router.post('/', async (req, res) => {
 
     for (const entry of people) {
       const apolloId = entry.id;
-      const phone = pickBestPhone(entry.phone_numbers);
+      if (!apolloId) {
+        console.warn('Apollo phone webhook: entry missing id, skipping');
+        continue;
+      }
 
+      const phone = pickBestPhone(entry.phone_numbers);
       if (!phone) {
         console.warn('Apollo phone webhook: no usable phone', { apolloId });
         continue;
@@ -85,7 +91,8 @@ router.post('/', async (req, res) => {
     res.json({ received: true, updated: totalUpdated });
   } catch (err) {
     console.error('Apollo phone webhook error:', err.message);
-    res.json({ received: true, error: err.message });
+    // Don't leak internal errors on this unauthenticated endpoint
+    res.json({ received: true });
   }
 });
 

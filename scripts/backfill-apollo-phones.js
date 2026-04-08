@@ -69,6 +69,7 @@ async function run() {
   console.log();
 
   // Backfill contacts missing apollo_person_id (or missing phone if --with-phone)
+  // Static strings only — not derived from user input
   const whereClause = WITH_PHONE
     ? `source = 'apollo' AND phone IS NULL AND email IS NOT NULL`
     : `source = 'apollo' AND apollo_person_id IS NULL AND email IS NOT NULL`;
