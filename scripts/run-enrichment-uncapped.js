@@ -186,7 +186,7 @@ async function run() {
       const { previews, contacts, creditsUsed } = result;
 
       if (contacts.length === 0) {
-        console.log(`  [${i + 1}/${companies.length}] [${tier}] ○ ${c.company_name} — ${previews.length} previews, 0 with phone`);
+        console.log(`  [${i + 1}/${companies.length}] [${tier}] ○ ${c.company_name} — ${previews.length} previews, 0 revealed`);
         noResults++;
       } else {
         let stored = 0;

@@ -8,7 +8,9 @@
  *
  * Apollo's API is two-step: search (free, returns anonymized previews with has_phone/has_email flags)
  * → reveal via /people/match with ID (1 credit, returns full name, email, phone, LinkedIn).
- * searchPeopleByCompany handles both steps: searches, then reveals only contacts with phone numbers.
+ * searchPeopleByCompany handles both steps: searches, then reveals matching contacts.
+ * With requestPhone=true (default): reveals only contacts with phone numbers (8 credits each).
+ * With requestPhone=false: reveals all matching contacts for email-only enrichment (1 credit each).
  */
 
 const BASE_URL = 'https://api.apollo.io/api/v1';
@@ -112,16 +114,18 @@ async function revealPerson(apolloId, requestPhone = true) {
  * Search for people at a company, then reveal those with phone numbers.
  *
  * Step 1 (free): /mixed_people/api_search — returns anonymized previews with has_direct_phone flag
- * Step 2 (1 credit each): /people/match with ID — reveals only contacts where has_direct_phone === "Yes"
+ * Step 2 (credits): /people/match with ID — reveals contacts (8 credits with phone, 1 without)
  *
- * Credit cost = number of contacts revealed (only those with phones), NOT total search results.
+ * Credit cost depends on requestPhone flag. Phone mode: only reveals contacts with phones.
  *
  * @param {string} domain - Company domain
- * @param {string[]} [titleFilters] - Job titles to filter by
- * @param {number} [perPage] - Max search results (default 10)
+ * @param {Object} [opts] - Options
+ * @param {string[]} [opts.titleFilters] - Job titles to filter by
+ * @param {number} [opts.perPage] - Max search results (default 10)
+ * @param {boolean} [opts.requestPhone] - Request phone reveals (8 credits) vs email-only (1 credit). Default true.
  * @returns {Promise<{previews: Object[], contacts: Object[], creditsUsed: number}>}
  */
-async function searchPeopleByCompany(domain, titleFilters = DEFAULT_TITLE_FILTERS, perPage = 10) {
+async function searchPeopleByCompany(domain, { titleFilters = DEFAULT_TITLE_FILTERS, perPage = 10, requestPhone = true } = {}) {
   const apiKey = process.env.APOLLO_API_KEY;
   if (!apiKey) return { previews: [], contacts: [], creditsUsed: 0 };
 
@@ -169,17 +173,22 @@ async function searchPeopleByCompany(domain, titleFilters = DEFAULT_TITLE_FILTER
   const searchData = await searchResp.json();
   const previews = searchData.people || [];
 
-  // Step 3: Reveal contacts that have phone numbers (8 credits each for phone reveal)
-  const withPhone = previews.filter(p => p.has_direct_phone === 'Yes');
+  // Step 3: Reveal contacts
+  // Phone mode (8 credits): only reveal contacts with phone numbers
+  // Email-only mode (1 credit): reveal all matching contacts
+  const toReveal = requestPhone
+    ? previews.filter(p => p.has_direct_phone === 'Yes')
+    : previews;
+  const creditCost = requestPhone ? PHONE_REVEAL_CREDIT_COST : 1;
   const contacts = [];
   let creditsUsed = 0;
 
-  for (const preview of withPhone) {
+  for (const preview of toReveal) {
     try {
-      const revealed = await revealPerson(preview.id);
+      const revealed = await revealPerson(preview.id, requestPhone);
       if (revealed) {
         contacts.push(revealed);
-        creditsUsed += PHONE_REVEAL_CREDIT_COST;
+        creditsUsed += creditCost;
       }
     } catch (err) {
       console.error(`Failed to reveal ${preview.id}:`, err.message);

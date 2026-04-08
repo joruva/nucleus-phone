@@ -17,7 +17,7 @@ const { normalizeCompanyName } = require('./company-normalizer');
 
 const APOLLO_DAILY_BUDGET = 50; // Matches V3.5 CAPACITY.DAILY_BUDGET.apollo (Basic plan: 1K credits/mo)
 const BUDGET_EXHAUSTED_PCT = 0.95; // Stop at 95% to leave headroom for V3.5 pipeline
-const VALID_TIERS = new Set(['spear', 'targeted', 'awareness']);
+const VALID_TIERS = new Set(['spear', 'targeted']);
 
 /**
  * Check remaining Apollo budget for today.
@@ -149,7 +149,7 @@ async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = 
         const result = await searchPeopleByCompany(company.domain);
         const contacts = result.contacts;
 
-        // Increment credits AFTER successful reveals (search is free, reveals cost 1 each)
+        // Increment credits AFTER successful reveals (search is free)
         if (result.creditsUsed > 0) {
           await incrementApolloBudget(result.creditsUsed);
           creditsUsed += result.creditsUsed;
