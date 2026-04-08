@@ -68,7 +68,7 @@ const PHONE_WEBHOOK_URL = process.env.APOLLO_PHONE_WEBHOOK_URL
  *
  * @param {string} apolloId - Apollo person ID from search results
  * @param {boolean} [requestPhone] - Request async phone delivery via webhook (default true)
- * @returns {Promise<{name, first_name, last_name, title, phone, email, linkedin_url}|null>}
+ * @returns {Promise<{apollo_person_id, name, first_name, last_name, title, phone, email, linkedin_url}|null>}
  */
 async function revealPerson(apolloId, requestPhone = true) {
   const apiKey = process.env.APOLLO_API_KEY;
@@ -97,6 +97,7 @@ async function revealPerson(apolloId, requestPhone = true) {
   if (!p) return null;
 
   return {
+    apollo_person_id: p.id || null,
     name: p.name || `${p.first_name || ''} ${p.last_name || ''}`.trim(),
     first_name: p.first_name || null,
     last_name: p.last_name || null,

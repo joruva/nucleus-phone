@@ -313,9 +313,11 @@ async function initSchema() {
       ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS email TEXT;
       ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS domain TEXT;
       ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS enrichment_batch_id TEXT;
+      ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS apollo_person_id TEXT;
       CREATE INDEX IF NOT EXISTS idx_pbc_domain ON v35_pb_contacts(domain) WHERE domain IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_pbc_phone ON v35_pb_contacts(phone) WHERE phone IS NOT NULL;
       CREATE INDEX IF NOT EXISTS idx_pbc_source ON v35_pb_contacts(source);
+      CREATE INDEX IF NOT EXISTS idx_pbc_apollo_id ON v35_pb_contacts(apollo_person_id) WHERE apollo_person_id IS NOT NULL;
     `);
 
     await client.query(`

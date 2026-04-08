@@ -2,14 +2,16 @@
 /**
  * scripts/backfill-apollo-phones.js
  *
- * Re-match Apollo contacts we already revealed to get their phone numbers.
- * These contacts were stored with phone=null because the revealPerson function
- * was reading the wrong field (phone_numbers[0].sanitized_number instead of
- * sanitized_phone / primary_phone.number).
+ * Re-match Apollo contacts to backfill apollo_person_id (and optionally phone).
  *
- * Re-matching by email costs 0 credits — Apollo already has the reveal cached.
+ * Default mode (no --with-phone): calls /people/match by email without
+ * reveal_phone_number. Gets apollo_person_id for free (cached reveal).
+ * Phone numbers won't be returned synchronously — they require webhook delivery.
  *
- * Usage: node scripts/backfill-apollo-phones.js [--dry-run] [--limit N]
+ * With --with-phone: also sends reveal_phone_number=true + webhook_url.
+ * Costs 8 credits per contact. Phone is delivered async via webhook.
+ *
+ * Usage: node scripts/backfill-apollo-phones.js [--dry-run] [--limit N] [--with-phone]
  */
 
 require('dotenv').config();
@@ -24,17 +26,26 @@ const pool = new Pool({
 });
 
 const APOLLO_API_KEY = process.env.APOLLO_API_KEY;
+const WEBHOOK_URL = process.env.APOLLO_PHONE_WEBHOOK_URL
+  || 'https://nucleus-phone.onrender.com/api/apollo/phone-webhook';
 const DRY_RUN = process.argv.includes('--dry-run');
+const WITH_PHONE = process.argv.includes('--with-phone');
 const LIMIT = (() => {
   const idx = process.argv.indexOf('--limit');
   return idx >= 0 ? parseInt(process.argv[idx + 1], 10) : 600;
 })();
 
 async function matchByEmail(email) {
+  const body = { email };
+  if (WITH_PHONE) {
+    body.reveal_phone_number = true;
+    body.webhook_url = WEBHOOK_URL;
+  }
+
   const resp = await fetch('https://api.apollo.io/api/v1/people/match', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': APOLLO_API_KEY },
-    body: JSON.stringify({ email, reveal_phone_number: true }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(10000),
   });
 
@@ -43,27 +54,38 @@ async function matchByEmail(email) {
   const p = data.person;
   if (!p) return null;
 
-  return p.sanitized_phone || p.primary_phone?.number || p.phone_numbers?.[0]?.sanitized_number || null;
+  return {
+    apollo_person_id: p.id || null,
+    phone: p.sanitized_phone || p.primary_phone?.number || p.phone_numbers?.[0]?.sanitized_number || null,
+  };
 }
 
 async function run() {
-  console.log(`\n=== Apollo Phone Backfill ===`);
-  console.log(`Mode: ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
-  console.log(`Limit: ${LIMIT}\n`);
+  console.log(`\n=== Apollo Contact Backfill ===`);
+  console.log(`Mode:       ${DRY_RUN ? 'DRY RUN' : 'LIVE'}`);
+  console.log(`Phone:      ${WITH_PHONE ? 'YES (8 credits each, async webhook)' : 'NO (ID backfill only, free)'}`);
+  console.log(`Limit:      ${LIMIT}`);
+  if (WITH_PHONE) console.log(`Webhook:    ${WEBHOOK_URL}`);
+  console.log();
+
+  // Backfill contacts missing apollo_person_id (or missing phone if --with-phone)
+  const whereClause = WITH_PHONE
+    ? `source = 'apollo' AND phone IS NULL AND email IS NOT NULL`
+    : `source = 'apollo' AND apollo_person_id IS NULL AND email IS NOT NULL`;
 
   const { rows: contacts } = await pool.query(
     `SELECT id, full_name, email, company_name, domain
      FROM v35_pb_contacts
-     WHERE source = 'apollo' AND phone IS NULL AND email IS NOT NULL
+     WHERE ${whereClause}
      ORDER BY id
      LIMIT $1`,
     [LIMIT],
   );
 
-  console.log(`${contacts.length} Apollo contacts with email but no phone\n`);
+  console.log(`${contacts.length} contacts to process\n`);
   if (!contacts.length) { await pool.end(); return; }
 
-  let found = 0, missed = 0, errors = 0;
+  let idBackfilled = 0, phoneFound = 0, missed = 0, errors = 0;
 
   for (let i = 0; i < contacts.length; i++) {
     const c = contacts[i];
@@ -73,14 +95,43 @@ async function run() {
         continue;
       }
 
-      const phone = await matchByEmail(c.email);
+      const result = await matchByEmail(c.email);
 
-      if (phone) {
-        await pool.query('UPDATE v35_pb_contacts SET phone = $1 WHERE id = $2', [phone, c.id]);
-        console.log(`  [${i + 1}/${contacts.length}] ✓ ${c.full_name} → ${phone}`);
-        found++;
+      if (!result) {
+        console.log(`  [${i + 1}/${contacts.length}] ○ ${c.full_name} — not found in Apollo`);
+        missed++;
+        continue;
+      }
+
+      // Always store apollo_person_id if we got one
+      const updates = [];
+      const values = [];
+      let paramIdx = 1;
+
+      if (result.apollo_person_id) {
+        updates.push(`apollo_person_id = $${paramIdx++}`);
+        values.push(result.apollo_person_id);
+        idBackfilled++;
+      }
+
+      if (result.phone) {
+        updates.push(`phone = $${paramIdx++}`);
+        values.push(result.phone);
+        phoneFound++;
+      }
+
+      if (updates.length > 0) {
+        values.push(c.id);
+        await pool.query(
+          `UPDATE v35_pb_contacts SET ${updates.join(', ')} WHERE id = $${paramIdx}`,
+          values,
+        );
+        const parts = [];
+        if (result.apollo_person_id) parts.push(`id=${result.apollo_person_id.substring(0, 8)}…`);
+        if (result.phone) parts.push(`phone=${result.phone}`);
+        console.log(`  [${i + 1}/${contacts.length}] ✓ ${c.full_name} → ${parts.join(', ')}`);
       } else {
-        console.log(`  [${i + 1}/${contacts.length}] ○ ${c.full_name} — no phone in Apollo`);
+        console.log(`  [${i + 1}/${contacts.length}] ○ ${c.full_name} — no new data`);
         missed++;
       }
 
@@ -98,10 +149,11 @@ async function run() {
   }
 
   console.log(`\n=== Results ===`);
-  console.log(`Phones found: ${found}`);
-  console.log(`No phone:     ${missed}`);
-  console.log(`Errors:       ${errors}`);
-  console.log(`Total:        ${contacts.length}`);
+  console.log(`IDs backfilled: ${idBackfilled}`);
+  console.log(`Phones found:   ${phoneFound}${WITH_PHONE ? ' (sync) + async via webhook' : ''}`);
+  console.log(`No data:        ${missed}`);
+  console.log(`Errors:         ${errors}`);
+  console.log(`Total:          ${contacts.length}`);
 
   await pool.end();
 }

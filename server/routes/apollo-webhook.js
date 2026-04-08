@@ -3,10 +3,13 @@
  *
  * When we call /people/match with reveal_phone_number=true, Apollo sends
  * the phone number asynchronously to this webhook. We update the matching
- * contact row in v35_pb_contacts.
+ * contact row in v35_pb_contacts via apollo_person_id.
  *
- * No auth middleware — Apollo doesn't send auth headers. We validate
- * the payload shape and require an Apollo person ID that exists in our DB.
+ * Apollo webhook payload format:
+ *   { status, total_requested_enrichments, people: [{ id, status, phone_numbers }] }
+ * Each phone_numbers entry: { sanitized_number, raw_number, type_cd, confidence_cd, status_cd }
+ *
+ * No auth middleware — Apollo doesn't send auth headers.
  */
 
 const { Router } = require('express');
@@ -14,81 +17,74 @@ const { pool } = require('../db');
 
 const router = Router();
 
+/**
+ * Pick the best phone number from Apollo's phone_numbers array.
+ * Prefers mobile/direct with valid status, falls back to first sanitized number.
+ */
+function pickBestPhone(phoneNumbers) {
+  if (!Array.isArray(phoneNumbers) || phoneNumbers.length === 0) return null;
+
+  const direct = phoneNumbers.find(p =>
+    (p.type_cd === 'mobile' || p.type_cd === 'direct')
+    && p.status_cd !== 'invalid_number',
+  );
+  if (direct?.sanitized_number) return direct.sanitized_number;
+
+  const valid = phoneNumbers.find(p => p.status_cd !== 'invalid_number');
+  return valid?.sanitized_number || valid?.raw_number
+    || phoneNumbers[0]?.sanitized_number || phoneNumbers[0]?.raw_number || null;
+}
+
 // POST /api/apollo/phone-webhook — Apollo sends phone numbers here
 router.post('/', async (req, res) => {
   try {
-    // TODO: Remove after Phase 0b validation complete (nucleus-phone-1jc)
+    // TODO: Remove after Phase 0b validation complete
     console.log('Apollo webhook raw:', JSON.stringify(req.body).substring(0, 500));
 
     const body = req.body;
 
-    // Apollo webhook payload contains the person object with phone_numbers
-    const person = body?.person || body;
-    const apolloId = person?.id;
-    const phoneNumbers = person?.phone_numbers;
-
-    if (!apolloId || !Array.isArray(phoneNumbers) || phoneNumbers.length === 0) {
-      // Log for debugging but return 200 — don't make Apollo retry
-      console.warn('Apollo phone webhook: no actionable data', {
-        hasId: !!apolloId,
-        phoneCount: phoneNumbers?.length || 0,
+    // Apollo sends { people: [{ id, phone_numbers }] }
+    const people = body?.people;
+    if (!Array.isArray(people) || people.length === 0) {
+      console.warn('Apollo phone webhook: no people array', {
+        keys: Object.keys(body || {}),
+        status: body?.status,
       });
       return res.json({ received: true, updated: 0 });
     }
 
-    // Pick the best phone number (sanitized, direct preferred)
-    const directPhone = phoneNumbers.find(p => p.type === 'direct' || p.type === 'mobile');
-    const phone = directPhone?.sanitized_number
-      || directPhone?.number
-      || phoneNumbers[0]?.sanitized_number
-      || phoneNumbers[0]?.number;
+    let totalUpdated = 0;
 
-    if (!phone) {
-      return res.json({ received: true, updated: 0 });
-    }
+    for (const entry of people) {
+      const apolloId = entry.id;
+      const phone = pickBestPhone(entry.phone_numbers);
 
-    // Update the contact in v35_pb_contacts by matching on Apollo person data.
-    // We match by email (most reliable) since we stored email during reveal.
-    const email = person.email;
-    const name = person.name || `${person.first_name || ''} ${person.last_name || ''}`.trim();
+      if (!phone) {
+        console.warn('Apollo phone webhook: no usable phone', { apolloId });
+        continue;
+      }
 
-    let updated = 0;
-
-    if (email) {
+      // Match by apollo_person_id — the only reliable key in the webhook payload
       const result = await pool.query(
         `UPDATE v35_pb_contacts
          SET phone = $1
-         WHERE email = $2 AND source = 'apollo' AND phone IS NULL
-         RETURNING id`,
-        [phone, email],
+         WHERE apollo_person_id = $2 AND source = 'apollo' AND phone IS NULL
+         RETURNING id, full_name, email`,
+        [phone, apolloId],
       );
-      updated = result.rowCount;
+
+      if (result.rowCount > 0) {
+        const row = result.rows[0];
+        console.log(`Apollo phone webhook: updated ${row.full_name} (${row.email}) → ${phone}`);
+        totalUpdated += result.rowCount;
+      } else {
+        console.warn('Apollo phone webhook: UNMATCHED', { apolloId, phone });
+      }
     }
 
-    // Fallback: match by name + source if email didn't match
-    if (updated === 0 && name) {
-      const result = await pool.query(
-        `UPDATE v35_pb_contacts
-         SET phone = $1
-         WHERE full_name = $2 AND source = 'apollo' AND phone IS NULL
-         RETURNING id`,
-        [phone, name],
-      );
-      updated = result.rowCount;
-    }
-
-    if (updated > 0) {
-      console.log(`Apollo phone webhook: updated ${updated} contact(s) — ${name || email} → ${phone}`);
-    } else {
-      console.warn('Apollo phone webhook: UNMATCHED — no contact row updated', {
-        apolloId, email, name, phone,
-      });
-    }
-
-    res.json({ received: true, updated });
+    res.json({ received: true, updated: totalUpdated });
   } catch (err) {
     console.error('Apollo phone webhook error:', err.message);
-    // Return 200 — don't make Apollo retry on our errors
     res.json({ received: true, error: err.message });
   }
 });

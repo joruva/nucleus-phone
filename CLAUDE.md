@@ -31,7 +31,7 @@ Outbound sales dialer PWA for Joruva's 6-person calling team. Twilio Conference-
 | `customer_interactions` | UCIL (creates it) | Cross-channel interaction history. Nucleus writes via `interaction-sync.js` |
 | `ucil_agent_stats` | This service | Materialized agent performance (nightly aggregation) |
 | `ucil_sync_state` | This service | Sync cursors, credit budgets, milestone dedup keys |
-| `v35_pb_contacts` | V3.5 | PhantomBuster LinkedIn contacts (read-only) |
+| `v35_pb_contacts` | V3.5 | PhantomBuster LinkedIn contacts. Apollo contacts stored with `source='apollo'` + `apollo_person_id` for webhook matching |
 | `v35_discovery_queue` | V3.5 | Pipeline signals (read-only) |
 | `v35_lead_reservoir` | V3.5 | ICP scores (read-only) |
 | `v35_webhook_events` | V3.5 | Email engagement (read-only) |

@@ -69,19 +69,21 @@ async function upsertContact(contact, company, batchId) {
     await pool.query(
       `INSERT INTO v35_pb_contacts
          (full_name, first_name, last_name, title, company_name, company_name_norm,
-          linkedin_profile_url, email, phone, domain, source, enrichment_batch_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'apollo', $11)
+          linkedin_profile_url, email, phone, domain, source, enrichment_batch_id, apollo_person_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'apollo', $11, $12)
        ON CONFLICT (domain, email)
          WHERE source = 'apollo' AND email IS NOT NULL
        DO UPDATE SET
          phone = COALESCE(EXCLUDED.phone, v35_pb_contacts.phone),
          title = COALESCE(EXCLUDED.title, v35_pb_contacts.title),
          full_name = COALESCE(EXCLUDED.full_name, v35_pb_contacts.full_name),
-         linkedin_profile_url = COALESCE(EXCLUDED.linkedin_profile_url, v35_pb_contacts.linkedin_profile_url)`,
+         linkedin_profile_url = COALESCE(EXCLUDED.linkedin_profile_url, v35_pb_contacts.linkedin_profile_url),
+         apollo_person_id = COALESCE(EXCLUDED.apollo_person_id, v35_pb_contacts.apollo_person_id)`,
       [
         contact.name, contact.first_name, contact.last_name, contact.title,
         company.company_name, norm,
         contact.linkedin_url, contact.email, contact.phone, company.domain, batchId,
+        contact.apollo_person_id,
       ],
     );
     return true;
@@ -91,9 +93,11 @@ async function upsertContact(contact, company, batchId) {
       await pool.query(
         `UPDATE v35_pb_contacts SET
            phone = COALESCE($1, phone), title = COALESCE($2, title),
-           email = COALESCE($3, email), domain = COALESCE($4, domain)
+           email = COALESCE($3, email), domain = COALESCE($4, domain),
+           apollo_person_id = COALESCE($6, apollo_person_id)
          WHERE linkedin_profile_url = $5`,
-        [contact.phone, contact.title, contact.email, company.domain, contact.linkedin_url],
+        [contact.phone, contact.title, contact.email, company.domain, contact.linkedin_url,
+         contact.apollo_person_id],
       );
       return true;
     }
