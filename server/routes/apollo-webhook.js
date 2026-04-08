@@ -75,7 +75,7 @@ router.post('/', async (req, res) => {
         `UPDATE v35_pb_contacts
          SET phone = $1
          WHERE apollo_person_id = $2 AND source = 'apollo' AND phone IS NULL
-         RETURNING id, full_name, email`,
+         RETURNING id`,
         [phone, apolloId],
       );
 
@@ -84,7 +84,7 @@ router.post('/', async (req, res) => {
         console.log(`Apollo phone webhook: updated contact ${row.id}`);
         totalUpdated += result.rowCount;
       } else {
-        console.warn('Apollo phone webhook: UNMATCHED', { apolloId, phone });
+        console.warn('Apollo phone webhook: UNMATCHED', { apolloId });
       }
     }
 
