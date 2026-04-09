@@ -3,17 +3,36 @@ const { apiKeyAuth } = require('../middleware/auth');
 const { searchContacts, getContact } = require('../lib/hubspot');
 const { pool } = require('../db');
 const { getSignalContacts, getContactsForDomain } = require('../lib/signal-contacts');
+const { TIMEZONE_GROUPS } = require('../lib/timezones');
 
 const router = Router();
+
+const VALID_TIERS = new Set(['spear', 'targeted', 'awareness']);
+const VALID_TIMEZONES = new Set(Object.keys(TIMEZONE_GROUPS));
 
 // ── Signal-scored contacts (must be before /:id) ────────────────────
 
 // GET /api/contacts/signal — companies with nested contacts, ordered by signal_score
+// Note: timezone and geo_state are mutually exclusive. If both are sent, timezone wins
+// (geo_state is ignored). This is enforced in buildSignalWhere.
 router.get('/signal', apiKeyAuth, async (req, res) => {
   try {
     const { signal_tier, geo_state, timezone, has_phone, limit = '50', offset = '0' } = req.query;
+
+    if (timezone && !VALID_TIMEZONES.has(timezone)) {
+      return res.status(400).json({ error: `Invalid timezone. Valid: ${[...VALID_TIMEZONES].join(', ')}` });
+    }
+
+    // signal_tier supports comma-separated values (e.g., "spear,targeted")
+    let tiers;
+    if (signal_tier) {
+      tiers = signal_tier.split(',');
+      const invalid = tiers.find(t => !VALID_TIERS.has(t));
+      if (invalid) return res.status(400).json({ error: `Invalid tier: ${invalid}` });
+    }
+
     const result = await getSignalContacts({
-      signal_tier: signal_tier || undefined,
+      signal_tier: tiers || undefined,
       geo_state: geo_state || undefined,
       timezone: timezone || undefined,
       has_phone: has_phone !== 'false', // default true

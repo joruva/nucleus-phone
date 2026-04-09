@@ -5,7 +5,7 @@ import { getSignalContacts, getSignalCallbacks } from '../lib/api';
 const TIER_COLORS = { spear: 'bg-jv-red', targeted: 'bg-jv-amber', awareness: 'bg-gray-500' };
 const TIER_BORDER = { spear: 'border-jv-red', targeted: 'border-jv-amber', awareness: 'border-gray-500' };
 const TIER_TEXT = { spear: 'text-jv-red', targeted: 'text-jv-amber', awareness: 'text-gray-400' };
-const STATES = ['OH', 'TX', 'CA', 'MI', 'PA', 'CT', 'WI', 'MN', 'NY', 'FL', 'AZ'];
+const PAGE_SIZE = 50;
 
 // Timezone filter options (labels only — mapping lives server-side in timezones.js)
 const TIMEZONE_OPTIONS = [
@@ -193,13 +193,15 @@ const FILTER_ALL = 'all';
 
 export default function Contacts({ identity, callState, twilioStatus }) {
   const [companies, setCompanies] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [availableStates, setAvailableStates] = useState([]);
   const [callbacks, setCallbacks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [tier, setTier] = useState('');
   const [state, setState] = useState('');
   const [timezone, setTimezone] = useState('');
   const [contactFilter, setContactFilter] = useState(FILTER_HAS_PHONE);
-  const [visibleCount, setVisibleCount] = useState(50);
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
 
@@ -209,23 +211,38 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     return () => clearInterval(id);
   }, []);
 
-  const fetchSignal = useCallback(async () => {
-    setLoading(true);
-    setVisibleCount(50);
+  // Server-side pagination: fetch PAGE_SIZE at a time, accumulate on "Show more"
+  const fetchPage = useCallback(async (offset = 0) => {
+    if (offset === 0) setLoading(true);
+    else setLoadingMore(true);
     try {
+      // When no tier selected, fetch spear+targeted only (exclude awareness server-side)
+      const tierParam = tier || 'spear,targeted';
       const data = await getSignalContacts({
-        signal_tier: tier || undefined,
+        signal_tier: tierParam,
         geo_state: state || undefined,
         timezone: timezone || undefined,
         has_phone: false,
-        limit: 1000,
+        limit: PAGE_SIZE,
+        offset,
       });
-      setCompanies(data.companies || []);
-    } catch (err) { console.error('Signal contacts fetch failed:', err); setCompanies([]); }
-    finally { setLoading(false); }
+      if (offset === 0) {
+        setCompanies(data.companies || []);
+        if (data.available_states) setAvailableStates(data.available_states);
+      } else {
+        setCompanies(prev => [...prev, ...(data.companies || [])]);
+      }
+      setTotal(data.total || 0);
+    } catch (err) {
+      console.error('Signal contacts fetch failed:', err);
+      if (offset === 0) setCompanies([]);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   }, [tier, state, timezone]);
 
-  useEffect(() => { fetchSignal(); }, [fetchSignal]);
+  useEffect(() => { fetchPage(0); }, [fetchPage]);
 
   // Poll callbacks every 60s
   useEffect(() => {
@@ -240,18 +257,15 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     return () => clearInterval(interval);
   }, []);
 
+  // Client-side contact filter (phone/contacts/all) — applied on top of server-paginated data
   const filtered = contactFilter === FILTER_HAS_PHONE
     ? companies.filter(c => c.contacts?.some(ct => ct.phone))
     : contactFilter === FILTER_HAS_CONTACTS
       ? companies.filter(c => c.contact_count > 0)
       : companies;
   const filterHidingResults = filtered.length === 0 && companies.length > 0 && contactFilter !== FILTER_ALL;
-  // Default (no tier selected): spear + targeted only. Awareness only shows when explicitly selected.
-  const allVisible = tier
-    ? filtered
-    : filtered.filter(c => c.signal_tier !== 'awareness');
-  const visible = allVisible.slice(0, visibleCount);
-  const hasMore = visibleCount < allVisible.length;
+  // Awareness exclusion is now server-side (tier param = 'spear,targeted' when no tier selected)
+  const hasMore = companies.length < total;
 
   return (
     <div className="flex flex-col h-full">
@@ -284,7 +298,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
           className="px-2 py-1 rounded-lg bg-jv-card border border-jv-border text-xs text-jv-muted"
         >
           <option value="">All states</option>
-          {STATES.map(s => <option key={s} value={s}>{s}</option>)}
+          {availableStates.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select
           value={contactFilter}
@@ -340,7 +354,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
           </p>
         ))}
 
-        {visible.map(company => (
+        {filtered.map(company => (
           <CompanyCard
             key={company.domain}
             company={company}
@@ -352,10 +366,11 @@ export default function Contacts({ identity, callState, twilioStatus }) {
 
         {hasMore && (
           <button
-            onClick={() => setVisibleCount(prev => prev + 50)}
-            className="w-full py-2 rounded-lg bg-jv-card border border-jv-border text-xs text-jv-muted hover:text-white transition-colors"
+            onClick={() => fetchPage(companies.length)}
+            disabled={loadingMore}
+            className="w-full py-2 rounded-lg bg-jv-card border border-jv-border text-xs text-jv-muted hover:text-white transition-colors disabled:opacity-50"
           >
-            Show more ({allVisible.length - visibleCount} remaining)
+            {loadingMore ? 'Loading...' : `Show more (${total - companies.length} remaining)`}
           </button>
         )}
       </div>

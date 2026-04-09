@@ -3,9 +3,20 @@
  *
  * Maps two-letter state codes to timezone groups and IANA identifiers.
  * Used by signal-contacts.js to expand a timezone filter into geo_state IN (...).
+ * Single source of truth — the client receives iana_timezone per company in the
+ * API response rather than maintaining its own copy of this mapping.
  *
- * States that span two zones use primary/majority timezone.
- * Arizona uses America/Phoenix (no DST).
+ * SPLIT-ZONE STATES: Several states span two timezones. We use the majority/capital
+ * timezone. This means calls to the minority zone could be off by one hour:
+ *   - FL: majority Eastern, panhandle is Central
+ *   - IN: majority Eastern, NW/SW corners are Central
+ *   - KY: majority Eastern, western half is Central
+ *   - TN: majority Eastern (Nashville+), western half (Memphis) is Central
+ *   - ND/SD/NE/KS: majority Central, western edges are Mountain
+ *   - OR/ID: majority Pacific/Mountain respectively, border areas differ
+ * For a sales dialer this is an acceptable tradeoff — worst case is off by 1 hour.
+ *
+ * Arizona uses America/Phoenix (no DST — permanent MST).
  */
 
 const TIMEZONE_GROUPS = {

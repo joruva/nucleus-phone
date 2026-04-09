@@ -24,12 +24,19 @@ function buildSignalWhere({ signal_tier, geo_state, timezone }) {
   const values = [];
   let idx = 1;
 
+  // signal_tier can be a single string or an array (e.g., ['spear', 'targeted'])
   if (signal_tier) {
-    conditions.push(`sm.signal_tier = $${idx++}`);
-    values.push(signal_tier);
+    if (Array.isArray(signal_tier)) {
+      conditions.push(`sm.signal_tier = ANY($${idx++})`);
+      values.push(signal_tier);
+    } else {
+      conditions.push(`sm.signal_tier = $${idx++}`);
+      values.push(signal_tier);
+    }
   }
 
-  // timezone expands to multiple states via IN; geo_state is a single-state exact match
+  // timezone expands to multiple states via ANY; geo_state is a single-state exact match.
+  // Mutually exclusive: timezone wins if both are provided.
   if (timezone) {
     const states = statesForTimezone(timezone);
     if (states && states.length > 0) {
@@ -48,12 +55,12 @@ function buildSignalWhere({ signal_tier, geo_state, timezone }) {
  * Get signal-scored companies with their known contacts, ordered by signal_score DESC.
  *
  * @param {Object} opts
- * @param {string} [opts.signal_tier] - Filter: 'spear' | 'targeted' | 'awareness'
+ * @param {string|string[]} [opts.signal_tier] - Filter: single tier or array (e.g., ['spear', 'targeted'])
  * @param {string} [opts.geo_state] - Filter: two-letter state code
  * @param {boolean} [opts.has_phone] - Only return companies with ≥1 phone contact (default true)
  * @param {number} [opts.limit] - Max companies (default 50, max 1000)
  * @param {number} [opts.offset] - Pagination offset (default 0)
- * @returns {Promise<{ companies: Object[], total: number }>}
+ * @returns {Promise<{ companies: Object[], total: number, available_states?: string[] }>}
  */
 async function getSignalContacts({
   signal_tier, geo_state, timezone, has_phone = true, limit = 50, offset = 0,
@@ -62,8 +69,8 @@ async function getSignalContacts({
   const lim = Math.max(1, Math.min(limit, 1000));
   const off = Math.max(0, offset);
 
-  // Run companies query and count query in parallel
-  const [companiesResult, countResult] = await Promise.all([
+  // Run companies, count, and (on first page) distinct states in parallel
+  const queries = [
     pool.query(
       `SELECT lr.domain, lr.company_name, lr.geo_state,
               lr.enrichment_status,
@@ -89,11 +96,27 @@ async function getSignalContacts({
        ${where}`,
       values,
     ),
-  ]);
+  ];
+  // Only fetch available states on the first page (used to populate the state dropdown)
+  if (off === 0) {
+    queries.push(pool.query(
+      `SELECT DISTINCT lr.geo_state
+       FROM v35_lead_reservoir lr
+       JOIN v35_signal_metadata sm ON sm.domain = lr.domain
+       WHERE lr.geo_state IS NOT NULL
+       ORDER BY lr.geo_state`,
+    ));
+  }
+  const [companiesResult, countResult, statesResult] = await Promise.all(queries);
 
   const companies = companiesResult.rows;
   const total = countResult.rows[0]?.total || 0;
-  if (companies.length === 0) return { companies: [], total };
+  if (companies.length === 0) {
+    return {
+      companies: [], total,
+      ...(statesResult && { available_states: statesResult.rows.map(r => r.geo_state) }),
+    };
+  }
 
   // Build normalized name → domain map (cache the norm for reuse in assembly)
   const companyNorms = new Map(); // domain → normalized name
@@ -221,6 +244,7 @@ async function getSignalContacts({
   return {
     companies: filtered,
     total,
+    ...(statesResult && { available_states: statesResult.rows.map(r => r.geo_state) }),
   };
 }
 
