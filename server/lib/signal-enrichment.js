@@ -163,12 +163,13 @@ async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = 
           await pool.query(
             `INSERT INTO v35_pb_contacts
                (full_name, first_name, last_name, title, company_name, company_name_norm,
-                linkedin_profile_url, email, phone, domain, source, enrichment_batch_id, apollo_person_id)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'apollo', $11, $12)
+                linkedin_profile_url, email, phone, phone_type, domain, source, enrichment_batch_id, apollo_person_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $9 IS NOT NULL THEN 'mobile' END, $10, 'apollo', $11, $12)
              ON CONFLICT (domain, email)
                WHERE source = 'apollo' AND email IS NOT NULL
              DO UPDATE SET
                phone = COALESCE(EXCLUDED.phone, v35_pb_contacts.phone),
+               phone_type = COALESCE(EXCLUDED.phone_type, v35_pb_contacts.phone_type),
                title = COALESCE(EXCLUDED.title, v35_pb_contacts.title),
                linkedin_profile_url = COALESCE(EXCLUDED.linkedin_profile_url, v35_pb_contacts.linkedin_profile_url),
                apollo_person_id = COALESCE(EXCLUDED.apollo_person_id, v35_pb_contacts.apollo_person_id)`,
