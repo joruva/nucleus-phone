@@ -29,6 +29,24 @@ export default function useTwilioDevice(identity) {
           if (!destroyed) setStatus('ready');
         });
 
+        dev.on('unregistered', () => {
+          console.warn('Twilio Device unregistered, attempting re-register...');
+          if (destroyed) return;
+          setStatus('initializing');
+          // Re-fetch token and re-register with backoff
+          setTimeout(async () => {
+            if (destroyed) return;
+            try {
+              const { token: freshToken } = await getToken(identity);
+              dev.updateToken(freshToken);
+              await dev.register();
+            } catch (err) {
+              console.error('Re-register failed:', err);
+              if (!destroyed) setStatus('error');
+            }
+          }, 2000);
+        });
+
         dev.on('error', (err) => {
           console.error('Twilio Device error:', err);
           if (!destroyed) setStatus('error');
@@ -40,6 +58,7 @@ export default function useTwilioDevice(identity) {
             dev.updateToken(newToken);
           } catch (err) {
             console.error('Token refresh failed:', err);
+            if (!destroyed) setStatus('error');
           }
         });
 

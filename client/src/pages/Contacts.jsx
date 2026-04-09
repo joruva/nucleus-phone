@@ -203,6 +203,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
     : contactFilter === FILTER_HAS_CONTACTS
       ? companies.filter(c => c.contact_count > 0)
       : companies;
+  const filterHidingResults = filtered.length === 0 && companies.length > 0 && contactFilter !== FILTER_ALL;
   // When a specific tier is selected, show all matches in one flat list.
   // Only split into main + collapsed awareness when showing all tiers.
   const spearTargeted = tier ? filtered : filtered.filter(c => c.signal_tier !== 'awareness');
@@ -275,6 +276,17 @@ export default function Contacts({ identity, callState, twilioStatus }) {
             No companies match filters.{' '}
             {tier === '' ? 'Run signal loaders to populate the pipeline.' : 'Try a different tier.'}
           </p>
+        )}
+        {!loading && filterHidingResults && (
+          <div className="text-center py-8">
+            <p className="text-jv-muted">{companies.length} companies found, but none match the current filter.</p>
+            <button
+              onClick={() => setContactFilter(FILTER_ALL)}
+              className="mt-2 px-3 py-1 rounded-lg bg-jv-accent/20 text-jv-accent text-sm hover:bg-jv-accent/30 transition-colors"
+            >
+              Show all {companies.length} companies
+            </button>
+          </div>
         )}
 
         {spearTargeted.map(company => (
