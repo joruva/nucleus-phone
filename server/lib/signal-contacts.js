@@ -51,7 +51,7 @@ function buildSignalWhere({ signal_tier, geo_state, timezone }) {
  * @param {string} [opts.signal_tier] - Filter: 'spear' | 'targeted' | 'awareness'
  * @param {string} [opts.geo_state] - Filter: two-letter state code
  * @param {boolean} [opts.has_phone] - Only return companies with ≥1 phone contact (default true)
- * @param {number} [opts.limit] - Max companies (default 50, max 200)
+ * @param {number} [opts.limit] - Max companies (default 50, max 1000)
  * @param {number} [opts.offset] - Pagination offset (default 0)
  * @returns {Promise<{ companies: Object[], total: number }>}
  */
@@ -59,7 +59,7 @@ async function getSignalContacts({
   signal_tier, geo_state, timezone, has_phone = true, limit = 50, offset = 0,
 } = {}) {
   const { where, values, idx } = buildSignalWhere({ signal_tier, geo_state, timezone });
-  const lim = Math.max(1, Math.min(limit, 200));
+  const lim = Math.max(1, Math.min(limit, 1000));
   const off = Math.max(0, offset);
 
   // Run companies query and count query in parallel

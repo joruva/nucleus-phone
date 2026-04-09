@@ -234,7 +234,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
         geo_state: state || undefined,
         timezone: timezone || undefined,
         has_phone: false,
-        limit: 200,
+        limit: 1000,
       });
       setCompanies(data.companies || []);
     } catch (err) { console.error('Signal contacts fetch failed:', err); setCompanies([]); }
