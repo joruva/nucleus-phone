@@ -57,7 +57,12 @@ async function triggerReveal(apolloPersonId) {
 }
 
 async function run() {
-  const limitClause = LIMIT > 0 ? `LIMIT ${LIMIT}` : '';
+  const params = [];
+  let limitClause = '';
+  if (LIMIT > 0) {
+    params.push(LIMIT);
+    limitClause = `LIMIT $${params.length}`;
+  }
 
   const { rows: contacts } = await pool.query(
     `SELECT id, full_name, email, phone, apollo_person_id, domain
@@ -67,6 +72,7 @@ async function run() {
        CASE WHEN phone IS NULL THEN 0 ELSE 1 END, -- missing phones first
        id
      ${limitClause}`,
+    params,
   );
 
   const withPhone = contacts.filter(c => c.phone).length;

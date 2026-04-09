@@ -14,9 +14,10 @@ const APOLLO_API_KEY = process.env.APOLLO_API_KEY;
 const WEBHOOK_URL = process.env.APOLLO_PHONE_WEBHOOK_URL
   || 'https://nucleus-phone.onrender.com/api/apollo/phone-webhook';
 
-// Brian Angle at buffalorock.com — currently has corporate number +12059423435
-const TEST_PERSON_ID = '651289454e21ed0001fb2da6';
-const TEST_EMAIL = 'bangle@buffalorock.com';
+// Default: Brian Angle at buffalorock.com. Override via CLI args:
+//   node scripts/test-rereveal.js <apollo_person_id> <email>
+const TEST_PERSON_ID = process.argv[2] || '651289454e21ed0001fb2da6';
+const TEST_EMAIL = process.argv[3] || 'bangle@buffalorock.com';
 
 async function main() {
   console.log('=== Re-reveal test ===');

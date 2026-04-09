@@ -271,13 +271,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
       {/* Company list */}
       <div className="flex-1 overflow-y-auto scroll-container px-4 space-y-3 pb-4">
         {loading && <p className="text-center text-jv-muted py-8">Loading signal queue...</p>}
-        {!loading && companies.length === 0 && (
-          <p className="text-center text-jv-muted py-8">
-            No companies match filters.{' '}
-            {tier === '' ? 'Run signal loaders to populate the pipeline.' : 'Try a different tier.'}
-          </p>
-        )}
-        {!loading && filterHidingResults && (
+        {!loading && (filterHidingResults ? (
           <div className="text-center py-8">
             <p className="text-jv-muted">{companies.length} companies found, but none match the current filter.</p>
             <button
@@ -287,7 +281,12 @@ export default function Contacts({ identity, callState, twilioStatus }) {
               Show all {companies.length} companies
             </button>
           </div>
-        )}
+        ) : companies.length === 0 && (
+          <p className="text-center text-jv-muted py-8">
+            No companies match filters.{' '}
+            {tier === '' ? 'Run signal loaders to populate the pipeline.' : 'Try a different tier.'}
+          </p>
+        ))}
 
         {spearTargeted.map(company => (
           <CompanyCard

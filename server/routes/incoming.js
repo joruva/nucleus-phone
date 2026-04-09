@@ -18,7 +18,7 @@ const { v4: uuidv4 } = require('uuid');
 const twilio = require('twilio');
 const { VoiceResponse, client } = require('../lib/twilio');
 const { pool } = require('../db');
-const { createConference } = require('../lib/conference');
+const { createConference, getConference } = require('../lib/conference');
 const { sendSlackAlert, sendSlackDM } = require('../lib/slack');
 
 const router = Router();
@@ -74,12 +74,12 @@ function makeTwilioWebhook(path) {
  * Used by three paths: inline safety net, dial-complete fallback, and
  * rep-status redirect. Kept in one place to avoid drift.
  */
-function appendVoicemailTwiml(twiml, callerPhone, repSlack) {
+function appendVoicemailTwiml(twiml, callerPhone, conferenceName) {
   twiml.say({
     voice: 'Polly.Joanna',
   }, 'Thank you for calling Joruva Industrial. No one is available to take your call right now. Please leave a message after the tone and we will get back to you as soon as possible.');
   let cbUrl = `${baseUrl}/api/voice/incoming/voicemail-complete?from=${encodeURIComponent(callerPhone)}`;
-  if (repSlack) cbUrl += `&rep_slack=${encodeURIComponent(repSlack)}`;
+  if (conferenceName) cbUrl += `&conf=${encodeURIComponent(conferenceName)}`;
   twiml.record({
     maxLength: 180,
     playBeep: true,
@@ -185,7 +185,7 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
   const dial = twiml.dial({
     callerId: callerPhone,
     timeout: 35,
-    action: `${baseUrl}/api/voice/incoming/dial-complete?conf=${encodeURIComponent(conferenceName)}&from=${encodeURIComponent(callerPhone)}&rep_slack=${encodeURIComponent(repSlackDm || '')}`,
+    action: `${baseUrl}/api/voice/incoming/dial-complete?conf=${encodeURIComponent(conferenceName)}&from=${encodeURIComponent(callerPhone)}`,
   });
   dial.conference({
     record: 'record-from-start',
@@ -201,7 +201,7 @@ router.post('/', makeTwilioWebhook('/api/voice/incoming'), async (req, res) => {
 
   // Inline voicemail TwiML after <Dial> — tertiary safety net if both
   // the rep-status redirect AND dial-complete action URL somehow fail.
-  appendVoicemailTwiml(twiml, callerPhone, repSlackDm);
+  appendVoicemailTwiml(twiml, callerPhone, conferenceName);
 
   // Slack: alert admin channel + DM the rep with cockpit deep link
   const cockpitUrl = `${baseUrl}/cockpit/${encodeURIComponent(callerPhone)}?conf=${encodeURIComponent(conferenceName)}`;
@@ -224,14 +224,15 @@ router.post('/dial-complete', makeTwilioWebhook('/api/voice/incoming/dial-comple
   const { DialCallStatus } = req.body;
   const conferenceName = req.query.conf;
   const callerPhone = req.query.from || 'unknown';
-  const repSlack = req.query.rep_slack || '';
+  const conf = getConference(conferenceName);
+  const repSlack = conf?.repSlackDm || '';
   const twiml = new VoiceResponse();
 
   if (DialCallStatus === 'completed') {
     twiml.hangup();
   } else {
     console.log(`incoming: dial-complete fallback (${DialCallStatus}) for ${conferenceName}`);
-    appendVoicemailTwiml(twiml, callerPhone, repSlack);
+    appendVoicemailTwiml(twiml, callerPhone, conferenceName);
   }
 
   res.type('text/xml').send(twiml.toString());
@@ -277,9 +278,10 @@ router.post('/rep-status', makeTwilioWebhook('/api/voice/incoming/rep-status'), 
       return;
     }
 
-    const repSlack = req.query.rep_slack || '';
+    const conf = getConference(conferenceName);
+    const repSlack = conf?.repSlackDm || '';
     await client.calls(callerSid).update({
-      url: `${baseUrl}/api/voice/incoming/voicemail?from=${encodeURIComponent(callerPhone)}&rep_slack=${encodeURIComponent(repSlack)}`,
+      url: `${baseUrl}/api/voice/incoming/voicemail?from=${encodeURIComponent(callerPhone)}&conf=${encodeURIComponent(conferenceName)}`,
       method: 'POST',
     });
 
@@ -293,9 +295,11 @@ router.post('/rep-status', makeTwilioWebhook('/api/voice/incoming/rep-status'), 
 
 router.post('/voicemail', makeTwilioWebhook('/api/voice/incoming/voicemail'), (req, res) => {
   const callerPhone = req.query.from || 'unknown';
-  const repSlack = req.query.rep_slack || '';
+  const conferenceName = req.query.conf;
+  const conf = conferenceName ? getConference(conferenceName) : null;
+  const repSlack = conf?.repSlackDm || '';
   const twiml = new VoiceResponse();
-  appendVoicemailTwiml(twiml, callerPhone, repSlack);
+  appendVoicemailTwiml(twiml, callerPhone, conferenceName);
   res.type('text/xml').send(twiml.toString());
 });
 
@@ -322,7 +326,9 @@ router.post('/voicemail-complete', makeTwilioWebhook('/api/voice/incoming/voicem
       text: `:mailbox_with_mail: Voicemail from ${callerPhone} (${RecordingDuration}s) — check call history`,
     }).catch(() => {});
 
-    const repDm = req.query.rep_slack || '';
+    const conferenceName = req.query.conf;
+    const conf = conferenceName ? getConference(conferenceName) : null;
+    const repDm = conf?.repSlackDm || '';
     if (repDm) {
       sendSlackDM(repDm,
         `:mailbox_with_mail: Voicemail from ${callerPhone} (${RecordingDuration}s) — check call history`

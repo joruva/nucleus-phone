@@ -29,22 +29,32 @@ export default function useTwilioDevice(identity) {
           if (!destroyed) setStatus('ready');
         });
 
+        let reregisterAttempts = 0;
+        const MAX_REREGISTER = 4;
+
         dev.on('unregistered', () => {
-          console.warn('Twilio Device unregistered, attempting re-register...');
           if (destroyed) return;
+          reregisterAttempts++;
+          if (reregisterAttempts > MAX_REREGISTER) {
+            console.error(`Twilio Device: gave up after ${MAX_REREGISTER} re-register attempts`);
+            setStatus('error');
+            return;
+          }
+          const delay = Math.min(2000 * Math.pow(2, reregisterAttempts - 1), 30000);
+          console.warn(`Twilio Device unregistered, attempt ${reregisterAttempts}/${MAX_REREGISTER} in ${delay}ms`);
           setStatus('initializing');
-          // Re-fetch token and re-register with backoff
           setTimeout(async () => {
             if (destroyed) return;
             try {
               const { token: freshToken } = await getToken(identity);
               dev.updateToken(freshToken);
               await dev.register();
+              reregisterAttempts = 0; // reset on success
             } catch (err) {
               console.error('Re-register failed:', err);
               if (!destroyed) setStatus('error');
             }
-          }, 2000);
+          }, delay);
         });
 
         dev.on('error', (err) => {
