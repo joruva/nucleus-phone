@@ -225,6 +225,7 @@ router.post('/dial-complete', makeTwilioWebhook('/api/voice/incoming/dial-comple
   const conferenceName = req.query.conf;
   const callerPhone = req.query.from || 'unknown';
   const conf = getConference(conferenceName);
+  if (conferenceName && !conf) console.warn(`incoming: dial-complete: conference ${conferenceName} already swept`);
   const repSlack = conf?.repSlackDm || '';
   const twiml = new VoiceResponse();
 
@@ -296,8 +297,7 @@ router.post('/rep-status', makeTwilioWebhook('/api/voice/incoming/rep-status'), 
 router.post('/voicemail', makeTwilioWebhook('/api/voice/incoming/voicemail'), (req, res) => {
   const callerPhone = req.query.from || 'unknown';
   const conferenceName = req.query.conf;
-  const conf = conferenceName ? getConference(conferenceName) : null;
-  const repSlack = conf?.repSlackDm || '';
+  if (conferenceName && !getConference(conferenceName)) console.warn(`incoming: voicemail: conference ${conferenceName} already swept`);
   const twiml = new VoiceResponse();
   appendVoicemailTwiml(twiml, callerPhone, conferenceName);
   res.type('text/xml').send(twiml.toString());
@@ -328,6 +328,7 @@ router.post('/voicemail-complete', makeTwilioWebhook('/api/voice/incoming/voicem
 
     const conferenceName = req.query.conf;
     const conf = conferenceName ? getConference(conferenceName) : null;
+    if (conferenceName && !conf) console.warn(`incoming: voicemail-complete: conference ${conferenceName} already swept`);
     const repDm = conf?.repSlackDm || '';
     if (repDm) {
       sendSlackDM(repDm,
