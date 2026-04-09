@@ -224,7 +224,7 @@ router.post('/dial-complete', makeTwilioWebhook('/api/voice/incoming/dial-comple
   const { DialCallStatus } = req.body;
   const conferenceName = req.query.conf;
   const callerPhone = req.query.from || 'unknown';
-  const conf = getConference(conferenceName);
+  const conf = conferenceName ? getConference(conferenceName) : null;
   if (conferenceName && !conf) console.warn(`incoming: dial-complete: conference ${conferenceName} already swept`);
   const repSlack = conf?.repSlackDm || '';
   const twiml = new VoiceResponse();
