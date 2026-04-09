@@ -216,7 +216,7 @@ export default function Contacts({ identity, callState, twilioStatus }) {
   const [tier, setTier] = useState('');
   const [state, setState] = useState('');
   const [timezone, setTimezone] = useState('');
-  const [contactFilter, setContactFilter] = useState(FILTER_ALL);
+  const [contactFilter, setContactFilter] = useState(FILTER_HAS_PHONE);
   const [now, setNow] = useState(() => new Date());
   const navigate = useNavigate();
 
