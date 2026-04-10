@@ -413,8 +413,14 @@ async function runChat({ message, conversationId, identity, role, onTextDelta, o
     role: m.role,
     content: m.content,
   }));
+  await dbLog('runChat:apiMessagesBuilt', { count: apiMessages.length });
 
   const systemPrompt = buildSystemPrompt(identity, role);
+  await dbLog('runChat:systemPromptBuilt', {
+    blocks: systemPrompt.length,
+    textLen: systemPrompt[0]?.text?.length,
+  });
+
   let fullAssistantText = '';
   let currentMessages = apiMessages;
   let toolRound = 0;
@@ -530,12 +536,15 @@ async function runChat({ message, conversationId, identity, role, onTextDelta, o
     //   unset/0             → normal streaming behavior
     // This lets us A/B without a redeploy cycle.
     const forceNonStreaming = process.env.FORCE_NON_STREAMING === '1';
+    await dbLog('runChat:tryEnter', { forceNonStreaming });
 
     // Tool-use loop: stream first turn, non-streaming for tool continuations
     while (toolRound <= MAX_TOOL_ROUNDS) {
+      await dbLog('runChat:loopIter', { toolRound, signalAborted: !!signal?.aborted });
       if (signal?.aborted) throw new Error('aborted');
 
       const stream = forceNonStreaming ? false : (toolRound === 0);
+      await dbLog('runChat:beforeCallAnthropic', { stream });
       const resp = await callAnthropic(stream);
 
       if (stream) {
