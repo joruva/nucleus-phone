@@ -35,6 +35,7 @@ router.post('/', sessionAuth, async (req, res) => {
     }
   }
 
+  console.log('[ask route] POST /api/ask start', { identity: req.user.identity, msgLen: message.length, conversationId });
   try {
     const result = await runChat({
       message: message.trim(),
@@ -46,15 +47,20 @@ router.post('/', sessionAuth, async (req, res) => {
       signal: controller.signal,
     });
 
+    console.log('[ask route] runChat done', { conversationId: result.conversationId, escalation: !!result.escalation });
     sendSSE({
       type: 'done',
       conversationId: result.conversationId,
       escalation: result.escalation || null,
     });
   } catch (err) {
-    if (err.message === 'aborted') return;
-    console.error('Ask Nucleus error:', err.message);
-    sendSSE({ type: 'error', message: 'Something went wrong. Try again.' });
+    // Client disconnect aborts — swallow silently (nothing to send to)
+    if (err.name === 'AbortError' || err.message === 'aborted') {
+      console.log('[ask route] client aborted');
+      return;
+    }
+    console.error('[ask route] error:', err.name, err.message, err.stack);
+    sendSSE({ type: 'error', message: `Error: ${err.message || 'Something went wrong'}` });
   } finally {
     if (!res.writableEnded) res.end();
   }

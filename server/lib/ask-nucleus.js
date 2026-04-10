@@ -376,13 +376,20 @@ async function appendMessage(conversationId, message) {
  * @returns {{ conversationId, escalation }}
  */
 async function runChat({ message, conversationId, identity, role, onTextDelta, onToolStatus, signal }) {
+  const log = (...args) => console.log('[ask-nucleus]', ...args);
+  log('runChat start', { identity, role, conversationId, msgLen: message?.length });
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
 
   // Get or create conversation, append user message
+  log('getOrCreateConversation...');
   const conv = await getOrCreateConversation(conversationId, identity);
+  log('conv', { id: conv.id, msgCount: conv.messages?.length });
+
   const userMsg = { role: 'user', content: message, timestamp: new Date().toISOString() };
   await appendMessage(conv.id, userMsg);
+  log('user message appended');
 
   // Build messages for Anthropic (last N from conversation)
   const allMessages = [...conv.messages, userMsg];
@@ -427,6 +434,7 @@ async function runChat({ message, conversationId, identity, role, onTextDelta, o
   }
 
   async function callAnthropic(stream, disableTools = false) {
+    log('callAnthropic start', { stream, disableTools, msgCount: currentMessages.length });
     currentRoundController = new AbortController();
     const timer = setTimeout(
       () => currentRoundController.abort(),
@@ -441,6 +449,7 @@ async function runChat({ message, conversationId, identity, role, onTextDelta, o
       ...(disableTools ? {} : { tools: TOOLS }),
     };
     try {
+      const fetchStart = Date.now();
       const resp = await fetch(ANTHROPIC_URL, {
         method: 'POST',
         signal: currentRoundController.signal,
@@ -451,11 +460,16 @@ async function runChat({ message, conversationId, identity, role, onTextDelta, o
         },
         body: JSON.stringify(body),
       });
+      log('callAnthropic fetch returned', { status: resp.status, ms: Date.now() - fetchStart });
       if (!resp.ok) {
         const errBody = await resp.text();
+        log('callAnthropic non-ok body', errBody.substring(0, 300));
         throw new Error(`Claude API ${resp.status}: ${errBody.substring(0, 200)}`);
       }
       return resp;
+    } catch (err) {
+      log('callAnthropic error', err.name, err.message);
+      throw err;
     } finally {
       clearTimeout(timer);
     }
