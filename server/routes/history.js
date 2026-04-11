@@ -1,59 +1,145 @@
 const { Router } = require('express');
-const { apiKeyAuth } = require('../middleware/auth');
+const { apiKeyAuth, sessionAuth } = require('../middleware/auth');
 const { pool } = require('../db');
 const { sendSlackAlert, formatCallAlert } = require('../lib/slack');
 const { addNoteToContact, getContact } = require('../lib/hubspot');
 const { formatDuration } = require('../lib/format');
 const { syncInteraction } = require('../lib/interaction-sync');
 const { sendFollowUpEmail } = require('../lib/email-sender');
+const { lookupCustomer } = require('../lib/customer-lookup');
 const { track } = require('../lib/inflight');
 
 const router = Router();
 
-// SAFETY: CALL_COLUMNS is a compile-time constant, never user input
+// SAFETY: All column constants are compile-time, never user input.
+
+// LIST_COLUMNS — used by GET / (list view). Prefixed with npc. for JOIN disambiguation.
+// Omits transcript (too large for list view).
+const LIST_COLUMNS = `npc.id, npc.created_at, npc.conference_name, npc.caller_identity,
+  npc.lead_phone, npc.lead_name, npc.lead_company, npc.hubspot_contact_id,
+  npc.direction, npc.status, npc.duration_seconds, npc.disposition, npc.qualification,
+  npc.products_discussed, npc.notes, npc.recording_url, npc.recording_duration,
+  npc.fireflies_uploaded, npc.lead_email, npc.follow_up_email_sent,
+  npc.follow_up_email_error, npc.ai_summary, npc.ai_action_items`;
+
+// DETAIL_COLUMNS — used by GET /:id (detail view). Explicit list (no npc.*)
+// so new secret columns don't silently leak to the client.
+const DETAIL_COLUMNS = `npc.id, npc.created_at, npc.conference_name, npc.caller_identity,
+  npc.lead_phone, npc.lead_name, npc.lead_company, npc.hubspot_contact_id,
+  npc.direction, npc.status, npc.duration_seconds, npc.disposition, npc.qualification,
+  npc.products_discussed, npc.notes, npc.recording_url, npc.recording_duration,
+  npc.fireflies_uploaded, npc.lead_email, npc.follow_up_email_sent,
+  npc.follow_up_email_error, npc.ai_summary, npc.ai_action_items, npc.transcript`;
+
+// CALL_COLUMNS — used by POST /:id/disposition UPDATE RETURNING (no JOIN).
 const CALL_COLUMNS = `id, created_at, conference_name, caller_identity, lead_phone,
   lead_name, lead_company, hubspot_contact_id, direction, status, duration_seconds,
   disposition, qualification, products_discussed, notes, recording_url,
   recording_duration, fireflies_uploaded, lead_email, follow_up_email_sent,
   follow_up_email_error, ai_summary, ai_action_items, transcript`;
 
-// GET /api/history — list past calls
-router.get('/', apiKeyAuth, async (req, res) => {
-  const { caller, disposition } = req.query;
+// LATERAL JOIN for customer_interactions — collapses to 1 row per call even if
+// multiple ci rows exist for the same session_id. Used by GET / and GET /:id.
+const CI_LATERAL = `
+  LEFT JOIN LATERAL (
+    SELECT summary AS ci_summary, sentiment, competitive_intel,
+           products_discussed AS ci_products, transcript AS ci_transcript
+    FROM customer_interactions
+    WHERE session_id = CONCAT('npc_', COALESCE(npc.conference_name, npc.id::text))
+    ORDER BY created_at DESC
+    LIMIT 1
+  ) ci ON true
+`;
+
+// FTS expression — MUST match the GIN index idx_npc_fts in server/db.js exactly.
+// Also referenced by server/lib/ask-nucleus.js search_my_calls tool.
+// If changed here, update those two places or the index silently stops being used.
+const FTS_EXPR = `to_tsvector('english',
+  COALESCE(npc.ai_summary,'') || ' ' || COALESCE(npc.notes,'') || ' ' ||
+  COALESCE(npc.lead_name,'') || ' ' || COALESCE(npc.lead_company,''))`;
+
+// hasSummary filter — uses EXISTS subquery so count and data queries share the
+// same WHERE clause without needing a LATERAL JOIN on the count query.
+const HAS_SUMMARY_FRAGMENT = `(
+  npc.ai_summary IS NOT NULL
+  OR npc.notes IS NOT NULL
+  OR EXISTS (
+    SELECT 1 FROM customer_interactions
+    WHERE session_id = CONCAT('npc_', COALESCE(npc.conference_name, npc.id::text))
+      AND summary IS NOT NULL
+  )
+)`;
+
+// GET /api/history — list past calls with FTS, filters, role-based access.
+// sessionAuth only — returns enriched AI/sentiment/competitive data via LATERAL
+// JOIN. Not safe for unscoped API key callers. Non-admins forced to own calls.
+router.get('/', sessionAuth, async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+  const { q, disposition, qualification, from, to } = req.query;
+  const hasSummary = req.query.hasSummary === 'true';
 
-  let where = ['status = \'completed\''];
+  // Access control: non-admin forced to own calls
+  let callerFilter = req.query.caller || null;
+  if (req.user.role !== 'admin') {
+    callerFilter = req.user.identity;
+  }
+
+  const where = [`npc.status = 'completed'`];
   const params = [];
   let idx = 1;
 
-  if (caller) {
-    where.push(`caller_identity = $${idx++}`);
-    params.push(caller);
+  if (callerFilter) {
+    where.push(`npc.caller_identity = $${idx++}`);
+    params.push(callerFilter);
   }
   if (disposition) {
-    where.push(`disposition = $${idx++}`);
+    where.push(`npc.disposition = $${idx++}`);
     params.push(disposition);
+  }
+  if (qualification) {
+    where.push(`npc.qualification = $${idx++}`);
+    params.push(qualification);
+  }
+  if (from) {
+    where.push(`npc.created_at >= $${idx++}`);
+    params.push(from);
+  }
+  if (to) {
+    where.push(`npc.created_at <= $${idx++}`);
+    params.push(to);
+  }
+  if (q && q.trim()) {
+    where.push(`${FTS_EXPR} @@ plainto_tsquery('english', $${idx++})`);
+    params.push(q.trim());
+  }
+  if (hasSummary) {
+    where.push(HAS_SUMMARY_FRAGMENT);
   }
 
   const whereClause = where.join(' AND ');
 
   try {
-    const result = await pool.query(
-      `SELECT ${CALL_COLUMNS} FROM nucleus_phone_calls
-       WHERE ${whereClause}
-       ORDER BY created_at DESC
-       LIMIT $${idx++} OFFSET $${idx}`,
-      [...params, limit, offset]
-    );
-
-    const countResult = await pool.query(
-      `SELECT COUNT(*) FROM nucleus_phone_calls WHERE ${whereClause}`,
-      params
-    );
+    const [dataResult, countResult] = await Promise.all([
+      pool.query(
+        `SELECT ${LIST_COLUMNS}, ci.ci_summary, ci.sentiment, ci.competitive_intel, ci.ci_products
+         FROM nucleus_phone_calls npc
+         ${CI_LATERAL}
+         WHERE ${whereClause}
+         ORDER BY npc.created_at DESC
+         LIMIT $${idx++} OFFSET $${idx}`,
+        [...params, limit, offset]
+      ),
+      // Count query shares the WHERE clause but needs NO JOIN — hasSummary uses
+      // EXISTS subquery, and no other filter references ci.* columns.
+      pool.query(
+        `SELECT COUNT(*) FROM nucleus_phone_calls npc WHERE ${whereClause}`,
+        params
+      ),
+    ]);
 
     res.json({
-      calls: result.rows,
+      calls: dataResult.rows,
       total: parseInt(countResult.rows[0].count, 10),
     });
   } catch (err) {
@@ -62,17 +148,70 @@ router.get('/', apiKeyAuth, async (req, res) => {
   }
 });
 
-// GET /api/history/:id — single call detail
-router.get('/:id', apiKeyAuth, async (req, res) => {
+// GET /api/history/:id/timeline — cross-channel interaction history for this contact.
+// Ownership enforced via parent call 404 gate before calling lookupCustomer.
+router.get('/:id/timeline', sessionAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  if (isNaN(id)) {
-    return res.status(400).json({ error: 'id must be an integer' });
+  if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
+
+  const where = ['id = $1'];
+  const params = [id];
+  if (req.user.role !== 'admin') {
+    where.push('caller_identity = $2');
+    params.push(req.user.identity);
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT lead_phone, lead_email, hubspot_contact_id, lead_company, lead_name, conference_name
+       FROM nucleus_phone_calls WHERE ${where.join(' AND ')}`,
+      params
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Call not found' });
+
+    const call = rows[0];
+    const history = await lookupCustomer({
+      phone: call.lead_phone,
+      email: call.lead_email,
+      contactId: call.hubspot_contact_id,
+      company: call.lead_company,
+      name: call.lead_name,
+    });
+
+    // Exclude the current call's own session_id from the timeline
+    const currentSessionId = `npc_${call.conference_name || id}`;
+    const interactions = (history?.interactions || []).filter(
+      (i) => i.sessionId !== currentSessionId
+    );
+
+    res.json({ interactions });
+  } catch (err) {
+    console.error('Timeline fetch failed:', err.message);
+    res.status(500).json({ error: 'Failed to fetch timeline' });
+  }
+});
+
+// GET /api/history/:id — single call detail with enrichment.
+// sessionAuth only. Ownership enforced for non-admins.
+router.get('/:id', sessionAuth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
+
+  const where = ['npc.id = $1'];
+  const params = [id];
+  if (req.user.role !== 'admin') {
+    where.push(`npc.caller_identity = $${params.length + 1}`);
+    params.push(req.user.identity);
   }
 
   try {
     const result = await pool.query(
-      `SELECT ${CALL_COLUMNS} FROM nucleus_phone_calls WHERE id = $1`,
-      [id]
+      `SELECT ${DETAIL_COLUMNS}, ci.ci_summary, ci.sentiment, ci.competitive_intel,
+              ci.ci_products, ci.ci_transcript
+       FROM nucleus_phone_calls npc
+       ${CI_LATERAL}
+       WHERE ${where.join(' AND ')}`,
+      params
     );
 
     if (result.rows.length === 0) {
@@ -86,7 +225,9 @@ router.get('/:id', apiKeyAuth, async (req, res) => {
   }
 });
 
-// POST /api/history/:id/disposition — set disposition + notes
+// POST /api/history/:id/disposition — set disposition + notes + optional follow-up email.
+// Stays on apiKeyAuth so automation can save dispositions. Ownership check only when
+// sessionAuth path is active (req.user is set).
 router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
@@ -100,6 +241,20 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
   }
 
   try {
+    // Ownership check (session auth only — API key callers are trusted)
+    if (req.user && req.user.role !== 'admin') {
+      const owner = await pool.query(
+        'SELECT caller_identity FROM nucleus_phone_calls WHERE id = $1',
+        [id]
+      );
+      if (!owner.rows.length) {
+        return res.status(404).json({ error: 'Call not found' });
+      }
+      if (owner.rows[0].caller_identity !== req.user.identity) {
+        return res.status(403).json({ error: 'Not authorized to modify this call' });
+      }
+    }
+
     const result = await pool.query(
       `UPDATE nucleus_phone_calls
        SET disposition = $1, qualification = $2, notes = $3,
@@ -198,10 +353,8 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
     const repEmail = req.user?.email;
 
     if (send_follow_up && repEmail && !call.follow_up_email_sent) {
-      // Basic email validation
       const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-      // Resolve lead email: request body → HubSpot lookup
       let resolvedEmail = lead_email;
       if (!resolvedEmail && call.hubspot_contact_id) {
         try {
@@ -212,7 +365,6 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
         }
       }
 
-      // Validate and save lead_email for auditability
       const validEmail = resolvedEmail && EMAIL_RE.test(resolvedEmail);
       if (validEmail) {
         await pool.query('UPDATE nucleus_phone_calls SET lead_email = $1 WHERE id = $2', [resolvedEmail, id]);
@@ -242,7 +394,18 @@ router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
       }
     }
 
-    res.json({ ...call, ...emailResult });
+    // Re-fetch the row with ci.* fields via LATERAL JOIN so the client can merge
+    // into the list without a refetch (prevents stale list rows after first save).
+    const enrichedResult = await pool.query(
+      `SELECT ${LIST_COLUMNS}, ci.ci_summary, ci.sentiment, ci.competitive_intel, ci.ci_products
+       FROM nucleus_phone_calls npc
+       ${CI_LATERAL}
+       WHERE npc.id = $1`,
+      [id]
+    );
+    const enriched = enrichedResult.rows[0] || call;
+
+    res.json({ ...enriched, ...emailResult });
   } catch (err) {
     console.error('Disposition save failed:', err.message);
     res.status(500).json({ error: 'Failed to save disposition' });

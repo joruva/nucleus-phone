@@ -67,7 +67,8 @@ Outbound sales dialer PWA for Joruva's 6-person calling team. Twilio Conference-
 | `/api/call` | Session cookie | Initiate/end calls |
 | `/api/call/recording-status` | None (Twilio webhook) | Recording completion callback |
 | `/api/contacts` | Session/API key | HubSpot contact search |
-| `/api/history` | Session/API key | Call history, disposition save, Fireflies upload |
+| `/api/history` GET (list + `/:id` + `/:id/timeline`) | Session only | Activity feed with FTS search (`q`), date range (`from`/`to`), `disposition`, `qualification`, `hasSummary`, enriched via LATERAL JOIN on customer_interactions. Non-admin callers forced to own calls. Returns sensitive AI data — NOT safe for API key access. |
+| `/api/history/:id/disposition` POST | Session/API key | Disposition save, Slack alert, HubSpot sync, interaction sync, optional follow-up email (session only). Non-admin ownership check when session-authed. |
 | `/api/cockpit/:identifier` | Session/API key | Pre-call rapport intelligence (identity + 7 data sources + Claude) |
 | `/api/fireflies-sync` | API key | Fireflies transcript sync (n8n cron, 30min) |
 | `/api/scoreboard` | Session/API key | 7-day leaderboard + daily sparklines + milestone aggregation |

@@ -83,17 +83,40 @@ export function getContact(id) {
   return apiFetch(`/contacts/${id}`);
 }
 
-export function getCallHistory({ caller, disposition, limit = 25, offset = 0 } = {}) {
+// ── Activity (merged History + Notes) ───────────────────────
+// Hits /api/history with the full param set: caller, FTS q, date range,
+// disposition, qualification, hasSummary, pagination.
+export function getActivity({
+  caller,
+  q,
+  from,
+  to,
+  disposition,
+  qualification,
+  hasSummary,
+  limit = 25,
+  offset = 0,
+  signal,
+} = {}) {
   const params = new URLSearchParams();
   if (caller) params.set('caller', caller);
+  if (q) params.set('q', q);
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
   if (disposition) params.set('disposition', disposition);
+  if (qualification) params.set('qualification', qualification);
+  if (hasSummary) params.set('hasSummary', 'true');
   params.set('limit', limit);
   params.set('offset', offset);
-  return apiFetch(`/history?${params}`);
+  return apiFetch(`/history?${params}`, { signal });
 }
 
-export function getCallDetail(id) {
-  return apiFetch(`/history/${id}`);
+export function getCallDetail(id, { signal } = {}) {
+  return apiFetch(`/history/${id}`, { signal });
+}
+
+export function getActivityTimeline(id, { signal } = {}) {
+  return apiFetch(`/history/${id}/timeline`, { signal });
 }
 
 export function saveDisposition(callId, data) {
@@ -158,19 +181,6 @@ export function runTestScenario(chunks, delayMs = 800) {
   });
 }
 
-// ── Call Summaries ───────────────────────────────────────────
-export function getCallSummaries({ caller, q, limit = 20, offset = 0, signal } = {}) {
-  const params = new URLSearchParams();
-  if (caller) params.set('caller', caller);
-  if (q) params.set('q', q);
-  params.set('limit', limit);
-  params.set('offset', offset);
-  return apiFetch(`/summaries?${params}`, { signal });
-}
-
-export function getCallSummaryDetail(id, { signal } = {}) {
-  return apiFetch(`/summaries/${id}`, { signal });
-}
 
 // ── Ask Nucleus ──────────────────────────────────────────────
 // askNucleus uses raw fetch (NOT apiFetch) because the response is an SSE

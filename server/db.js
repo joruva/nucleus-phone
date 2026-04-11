@@ -338,7 +338,7 @@ async function initSchema() {
 
     // ── Full-text search index for call summaries ────────────────
     // IMPORTANT: This expression must match the to_tsvector in:
-    //   - server/routes/summaries.js (GET /api/summaries search)
+    //   - server/routes/history.js (GET /api/history FTS_EXPR constant)
     //   - server/lib/ask-nucleus.js (search_my_calls tool)
     // If changed here, update both or the GIN index silently stops being used.
     await client.query(`
