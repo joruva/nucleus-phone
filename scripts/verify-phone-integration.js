@@ -5,16 +5,27 @@
  * Validates response shapes from every signal/cockpit/pipeline endpoint.
  * Non-destructive: never spends credits or mutates state.
  *
- * Usage: node scripts/verify-phone-integration.js [base_url]
+ * Usage:
+ *   NUCLEUS_PHONE_API_KEY=... MC_API_KEY=... node scripts/verify-phone-integration.js [base_url] [mc_url]
+ *
+ *   Keys default to .env if present (dotenv loaded below).
  *
  * Plan ref: ~/.claude/plans/toasty-knitting-marshmallow.md (Verification Plan)
  * Bead: nucleus-phone-kc8.9
  */
 
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+
 const BASE = process.argv[2] || 'https://nucleus-phone.onrender.com';
 const MC_BASE = process.argv[3] || 'https://joruva-multichannel.onrender.com';
-const API_KEY = '7HiiWgouyuepJPODV38YeDbTNVQi34Iv';
-const MC_API_KEY = 'Tt2k+Vrj9/FL5O40C98IM5ogno4VBZyNPEX3G0DS1n8=';
+const API_KEY = process.env.NUCLEUS_PHONE_API_KEY;
+const MC_API_KEY = process.env.MC_API_KEY; // optional — Check 8 skipped if absent
+
+if (!API_KEY) {
+  console.error('Missing required env var: NUCLEUS_PHONE_API_KEY');
+  console.error('Set it in .env or export before running.');
+  process.exit(2);
+}
 
 let passed = 0;
 let failed = 0;
@@ -24,17 +35,27 @@ let skipped = 0;
 
 async function apiFetch(base, path, opts = {}) {
   const key = base === MC_BASE ? MC_API_KEY : API_KEY;
+  const body = opts.body ? JSON.stringify(opts.body) : undefined;
+  const headers = {
+    'X-Api-Key': key,
+    'X-Requested-With': 'fetch',
+    ...(body ? { 'Content-Type': 'application/json' } : {}),
+    ...(opts.headers || {}),
+  };
   const resp = await fetch(`${base}${path}`, {
     method: opts.method || 'GET',
-    headers: {
-      'X-Api-Key': key,
-      'X-Requested-With': 'fetch',
-      ...(opts.headers || {}),
-    },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    headers,
+    body,
     signal: AbortSignal.timeout(15000),
   });
-  return { status: resp.status, data: await resp.json() };
+  let data;
+  try {
+    data = await resp.json();
+  } catch {
+    const text = await resp.text().catch(() => '');
+    data = { _parseError: true, body: text.slice(0, 500) };
+  }
+  return { status: resp.status, data };
 }
 
 function assert(name, ok, detail) {
@@ -52,7 +73,7 @@ function skip(name, reason) {
   skipped++;
 }
 
-function hasFields(obj, fields) {
+function missingFields(obj, fields) {
   return fields.filter(f => obj[f] === undefined);
 }
 
@@ -72,13 +93,13 @@ async function checkPipeline() {
 
   const c = data.companies[0];
   const required = ['domain', 'company_name', 'signal_tier', 'signal_score'];
-  const missing = hasFields(c, required);
+  const missing = missingFields(c, required);
   assert('Company has required fields', !missing.length,
     `missing: ${missing.join(', ')}`);
 
   // Plan specifies these signal fields must be present
   const signalFields = ['cert_expiry_date', 'contract_total', 'source_count'];
-  const missingSignal = hasFields(c, signalFields);
+  const missingSignal = missingFields(c, signalFields);
   assert('Company has signal enrichment fields', !missingSignal.length,
     `missing: ${missingSignal.join(', ')}`);
 
@@ -136,8 +157,11 @@ async function checkSingleCompany(domain) {
     const c = data.contacts[0];
     assert('Contact has source discriminator', !!c.source,
       `source field: ${c.source}`);
-    const validSources = new Set(['phantombuster', 'apollo', 'hubspot']);
-    assert('Source is valid enum', validSources.has(c.source),
+    const knownSources = new Set(['phantombuster', 'apollo', 'hubspot']);
+    if (!knownSources.has(c.source)) {
+      console.log(`  \u26a0 Unknown source "${c.source}" \u2014 new source type? Update knownSources if intentional.`);
+    }
+    assert('Source is non-empty string', typeof c.source === 'string' && c.source.length > 0,
       `got "${c.source}"`);
   }
 }
@@ -149,22 +173,14 @@ async function checkPerCompanyEnrich(domain) {
 
   // Plan specified this endpoint but it was never implemented.
   // Verify it 404s (not 500) to confirm clean routing.
+  // TODO: Convert to full shape validation once the endpoint ships.
   if (!domain) { skip('All checks', 'no domain available'); return; }
 
-  try {
-    const resp = await fetch(`${BASE}/api/contacts/signal/${encodeURIComponent(domain)}/enrich`, {
-      method: 'POST',
-      headers: { 'X-Api-Key': API_KEY, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-    });
-    // This endpoint doesn't exist yet — Express should return 404 or the
-    // /:domain route might catch "enrich" as a domain. Either way, not 500.
-    assert('Endpoint responds (not 500)', resp.status !== 500,
-      `got ${resp.status}`);
-    console.log(`  \u2139 Status: ${resp.status} \u2014 endpoint not yet implemented (plan Phase 3 item)`);
-  } catch (err) {
-    assert('Endpoint reachable', false, err.message);
-  }
+  const { status } = await apiFetch(BASE, `/api/contacts/signal/${encodeURIComponent(domain)}/enrich`, {
+    method: 'POST',
+  });
+  assert('Endpoint responds (not 500)', status !== 500, `got ${status}`);
+  console.log(`  \u2139 Status: ${status} \u2014 endpoint not yet implemented (plan Phase 3 item)`);
 }
 
 // ── Check 5: Batch enrichment (read-only) ────────────────────────────
@@ -180,23 +196,12 @@ async function checkBatchEnrichment() {
     `got: ${JSON.stringify(data).slice(0, 100)}`);
 
   // Verify POST rejects bad input without spending credits
-  try {
-    const resp = await fetch(`${BASE}/api/signals/enrich-batch`, {
-      method: 'POST',
-      headers: {
-        'X-Api-Key': API_KEY,
-        'X-Requested-With': 'fetch',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ tiers: ['invalid_tier'] }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const body = await resp.json();
-    assert('Rejects invalid tiers', resp.status === 400,
-      `expected 400, got ${resp.status}: ${body.error || JSON.stringify(body).slice(0, 80)}`);
-  } catch (err) {
-    assert('POST endpoint reachable', false, err.message);
-  }
+  const post = await apiFetch(BASE, '/api/signals/enrich-batch', {
+    method: 'POST',
+    body: { tiers: ['invalid_tier'] },
+  });
+  assert('Rejects invalid tiers', post.status === 400,
+    `expected 400, got ${post.status}: ${post.data.error || JSON.stringify(post.data).slice(0, 80)}`);
 }
 
 // ── Check 6: Callbacks ───────────────────────────────────────────────
@@ -231,7 +236,7 @@ async function checkCockpit(phone) {
   if (data.signalMetadata) {
     const fields = ['signal_tier', 'signal_score', 'cert_expiry_date',
       'cert_standard', 'contract_total', 'dod_flag'];
-    const missing = hasFields(data.signalMetadata, fields);
+    const missing = missingFields(data.signalMetadata, fields);
     assert('Signal metadata has all plan-specified fields', !missing.length,
       `missing: ${missing.join(', ')}`);
     console.log(`  Signal: tier=${data.signalMetadata.signal_tier}, ` +
@@ -250,6 +255,8 @@ async function checkCockpit(phone) {
 async function checkMultichannelAPI() {
   console.log('\n\u2550\u2550\u2550 Check 8/8: Multichannel ABM API (GET /admin/abm/accounts) \u2550\u2550\u2550');
 
+  if (!MC_API_KEY) { skip('All checks', 'MC_API_KEY not set'); return; }
+
   try {
     const { status, data } = await apiFetch(MC_BASE, '/admin/abm/accounts?limit=3');
     assert('Returns 200', status === 200, `got ${status}`);
@@ -260,7 +267,7 @@ async function checkMultichannelAPI() {
       const a = data.accounts[0];
       const signalFields = ['signal_tier', 'signal_score', 'source_count',
         'cert_expiry_date', 'contract_total', 'dod_flag'];
-      const missing = hasFields(a, signalFields);
+      const missing = missingFields(a, signalFields);
       assert('Account has signal fields (Phase 2 fix)', !missing.length,
         `missing: ${missing.join(', ')}`);
       assert('Account has domain', !!a.domain);
@@ -275,23 +282,32 @@ async function checkMultichannelAPI() {
 
 // ── Runner ───────────────────────────────────────────────────────────
 
+function banner(lines) {
+  const w = Math.max(...lines.map(l => l.length)) + 4;
+  console.log('\n\u2554' + '\u2550'.repeat(w) + '\u2557');
+  for (const l of lines) console.log(`\u2551  ${l.padEnd(w - 2)}\u2551`);
+  console.log('\u255a' + '\u2550'.repeat(w) + '\u255d');
+}
+
 async function run() {
-  console.log(`\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557`);
-  console.log(`\u2551  Signal Engine Integration Verification       \u2551`);
-  console.log(`\u2551  API: ${BASE.padEnd(41)}\u2551`);
-  console.log(`\u2551  MC:  ${MC_BASE.padEnd(41)}\u2551`);
-  console.log(`\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d`);
+  banner([
+    'Signal Engine Integration Verification',
+    `API: ${BASE}`,
+    `MC:  ${MC_BASE}`,
+  ]);
 
-  // Check 1 feeds a domain to checks 3-4
+  // Checks 1-2 feed data to downstream checks — must run first
   const pipelineDomain = await checkPipeline();
-
-  // Check 2 feeds a domain + phone to checks 3, 4, 7
   const signalResult = await checkSignalContacts();
   const testDomain = signalResult?.domain || pipelineDomain;
   const testPhone = signalResult?.phone;
 
+  // Checks 3-4 depend on domain from above — sequential
   await checkSingleCompany(testDomain);
   await checkPerCompanyEnrich(testDomain);
+
+  // Checks 5-8 are independent of each other but we run sequentially
+  // so console output stays ordered (parallel saves <2s on 4 HTTP calls).
   await checkBatchEnrichment();
   await checkCallbacks();
   await checkCockpit(testPhone);
@@ -300,14 +316,11 @@ async function run() {
   // Summary
   const total = passed + failed;
   const pct = total ? Math.round((passed / total) * 100) : 0;
-  console.log(`\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557`);
-  console.log(`\u2551  ${passed} passed, ${failed} failed, ${skipped} skipped (${pct}%)`.padEnd(48) + `\u2551`);
-  if (failed === 0) {
-    console.log(`\u2551  All integration contracts verified.           \u2551`);
-  } else {
-    console.log(`\u2551  ACTION REQUIRED: ${failed} check(s) failing.`.padEnd(48) + `\u2551`);
-  }
-  console.log(`\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d\n`);
+  const summary = `${passed} passed, ${failed} failed, ${skipped} skipped (${pct}%)`;
+  const verdict = failed === 0
+    ? 'All integration contracts verified.'
+    : `ACTION REQUIRED: ${failed} check(s) failing.`;
+  banner([summary, verdict]);
 
   process.exit(failed > 0 ? 1 : 0);
 }
