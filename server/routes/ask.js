@@ -13,7 +13,7 @@ const router = Router();
 router.use(sessionAuth, rbac('external_caller'));
 
 // POST /api/ask — Send message, get SSE stream
-router.post('/', sessionAuth, async (req, res) => {
+router.post('/', async (req, res) => {
   const { message, conversationId } = req.body;
   if (!message || typeof message !== 'string' || !message.trim()) {
     return res.status(400).json({ error: 'message required' });
@@ -108,7 +108,7 @@ router.post('/', sessionAuth, async (req, res) => {
 });
 
 // GET /api/ask/conversations — List user's conversations
-router.get('/conversations', sessionAuth, async (req, res) => {
+router.get('/conversations', async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 20, 1), 100);
 
   try {
@@ -138,7 +138,7 @@ router.get('/conversations', sessionAuth, async (req, res) => {
 });
 
 // GET /api/ask/conversations/:id — Single conversation (for hook verification)
-router.get('/conversations/:id', sessionAuth, async (req, res) => {
+router.get('/conversations/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
 
@@ -165,7 +165,7 @@ router.get('/conversations/:id', sessionAuth, async (req, res) => {
 });
 
 // DELETE /api/ask/conversations/:id — Delete conversation (atomic ownership check)
-router.delete('/conversations/:id', sessionAuth, async (req, res) => {
+router.delete('/conversations/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
 
@@ -189,7 +189,7 @@ router.delete('/conversations/:id', sessionAuth, async (req, res) => {
 });
 
 // POST /api/ask/escalate — Escalate question to Tom via SMS + Slack
-router.post('/escalate', sessionAuth, async (req, res) => {
+router.post('/escalate', async (req, res) => {
   const { question, context, company, contact, conversationId } = req.body;
   if (!question || typeof question !== 'string') {
     return res.status(400).json({ error: 'question required' });

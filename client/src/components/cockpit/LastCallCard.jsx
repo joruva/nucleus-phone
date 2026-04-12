@@ -2,6 +2,8 @@
 // Renders null when there are no prior calls, the latest call has no summary yet,
 // OR the caller was API-key-authed (server strips ai_summary — see cockpit.js:226).
 
+import { formatRelativeDay } from '../../lib/format';
+
 const DISPOSITION_STYLE = {
   qualified_hot:      { label: 'Hot',        bar: 'var(--cockpit-red-text)',   pillBg: 'var(--cockpit-red-bg)',   pillText: 'var(--cockpit-red-text)' },
   qualified_warm:     { label: 'Warm',       bar: 'var(--cockpit-amber-600)',  pillBg: 'var(--cockpit-amber-50)', pillText: 'var(--cockpit-amber-900)' },
@@ -14,17 +16,6 @@ const DISPOSITION_STYLE = {
 };
 
 const FALLBACK_STYLE = { label: 'Prior call', bar: 'var(--cockpit-card-border)', pillBg: 'var(--cockpit-card)', pillText: 'var(--cockpit-text-muted)' };
-
-function formatRelative(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-  if (days === 0) return 'Today';
-  if (days === 1) return 'Yesterday';
-  if (days < 7) return `${days}d ago`;
-  if (days < 30) return `${Math.floor(days / 7)}w ago`;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 function formatAbsolute(dateStr) {
   if (!dateStr) return '';
@@ -59,7 +50,7 @@ export default function LastCallCard({ priorCalls }) {
             {style.label}
           </span>
           <span className="text-[11px] text-cp-text-muted">
-            {formatRelative(last.created_at)}
+            {formatRelativeDay(last.created_at)}
             {caller && ` · ${caller}`}
           </span>
         </div>

@@ -141,11 +141,11 @@ function SentimentDot({ sentiment }) {
   );
 }
 
-function cockpitIdentifier(call) {
+export function cockpitIdentifier(call) {
   return call.lead_phone || call.lead_email || null;
 }
 
-function ActivityCard({ call, onOpen, selected }) {
+export function ActivityCard({ call, onOpen, selected }) {
   const navigate = useNavigate();
   const summary = call.ai_summary || call.ci_summary || call.notes || '';
   const truncated = summary.length > 180 ? summary.substring(0, 180) + '...' : summary;

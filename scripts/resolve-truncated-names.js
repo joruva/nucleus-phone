@@ -9,6 +9,7 @@ require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') }
 
 const { pool } = require('../server/db');
 const { matchPerson } = require('../server/lib/apollo');
+const { checkApolloBudget } = require('../server/lib/signal-enrichment');
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const LIMIT = parseInt(process.argv.find((_, i, a) => a[i - 1] === '--limit') || '250', 10);
@@ -16,6 +17,17 @@ const DELAY_MS = 500; // Apollo rate limit: ~2 req/s
 
 async function main() {
   console.log(`Resolving truncated names (dry_run=${DRY_RUN}, limit=${LIMIT})`);
+
+  // Check Apollo credit budget before making any API calls
+  if (!DRY_RUN) {
+    const budget = await checkApolloBudget();
+    console.log(`Apollo budget: ${budget.consumed} consumed, ${budget.remaining} remaining`);
+    if (budget.remaining <= 0 || !budget.allowed) {
+      console.log('Apollo daily budget exhausted. Skipping. Run again when credits refresh.');
+      await pool.end();
+      return;
+    }
+  }
 
   const { rows } = await pool.query(`
     SELECT id, full_name, first_name, last_name, title, company_name, phone, email

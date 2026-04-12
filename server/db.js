@@ -508,6 +508,12 @@ async function initSchema() {
     `);
     console.log('phone_suffix7 columns + triggers + indexes ready');
 
+    // Phone numbers spoken during calls, captured from RT transcription
+    await client.query(`
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS captured_phones JSONB DEFAULT '[]'::jsonb;
+    `);
+    console.log('captured_phones column ready');
+
   } finally {
     client.release();
   }

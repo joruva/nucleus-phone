@@ -21,6 +21,7 @@ const { broadcast } = require('../lib/live-analysis');
 const { track } = require('../lib/inflight');
 const { processEquipmentChunk } = require('../lib/equipment-pipeline');
 const { summarizeCall, MIN_TRANSCRIPT_LENGTH } = require('../lib/call-summarizer');
+const { capturePhones } = require('../lib/phone-extractor');
 
 const router = Router();
 
@@ -64,7 +65,7 @@ router.post('/', twilioWebhook, async (req, res) => {
   let call;
   try {
     const { rows } = await pool.query(
-      'SELECT id, conference_name FROM nucleus_phone_calls WHERE caller_call_sid = $1',
+      'SELECT id, conference_name, lead_phone FROM nucleus_phone_calls WHERE caller_call_sid = $1',
       [CallSid]
     );
     call = rows[0];
@@ -101,6 +102,11 @@ router.post('/', twilioWebhook, async (req, res) => {
   // Run entity extraction pipeline (fire-and-forget, don't block)
   processEquipmentChunk(callId, 'real', String(call.id), transcriptText).catch((err) => {
     console.error('transcription: pipeline error:', err.message);
+  });
+
+  // Capture any phone numbers spoken during the call
+  capturePhones(call.id, call.lead_phone, transcriptText).catch((err) => {
+    console.error('transcription: phone capture error:', err.message);
   });
 });
 

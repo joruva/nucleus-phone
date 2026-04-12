@@ -69,3 +69,16 @@ export function formatRelative(dateStr) {
   }
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
+
+// Day-granularity variant: "Today" / "Yesterday" / "3d ago" / "2w ago" / "Mar 25".
+// Used by cockpit cards where minute-level precision is noise.
+export function formatRelativeDay(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+  if (days === 0) return 'Today';
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  if (days < 30) return `${Math.floor(days / 7)}w ago`;
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
