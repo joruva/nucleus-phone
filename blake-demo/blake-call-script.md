@@ -2,7 +2,7 @@
 
 **Sunday, April 12, 2026 · 1:00 PM Arizona · 20 minutes · Microsoft Teams**
 
-**Opportunity:** Commission-only outbound sales (evenings + days off), Nucleus Phone dialer, Joruva Industrial air compression equipment. Referral from Britt.
+**Opportunity:** Commission-only outbound sales (morning shift, East Coast focus), Nucleus Phone dialer, Joruva Industrial air compression equipment. Referral from Britt. Path to full-time if volume justifies it.
 
 ---
 
@@ -23,9 +23,11 @@
 
 "Here's what I want to cover. I'll show you what we do, I'll show you the tool you'd be using, and I'll show you the money. Twenty minutes, and at the end you tell me if it's interesting."
 
+"And I'll be honest with you up front. What Paul and I are really looking for is a morning guy. Somebody who can get on the phone early, hit East Coast shops while they're open, and do that before heading to the dealership. I want to talk about what that looks like and whether it fits your life."
+
 "Sound good?"
 
-**Wait for response. Then share screen.**
+**Wait for response. Gauge energy level on the morning framing. Then share screen.**
 
 ---
 
@@ -131,15 +133,27 @@
 
 **Back to the HTML demo, Section 05.**
 
-"Here's what this looks like as a gig."
+"Here's what this looks like day to day."
 
-"What we need from you: you work it in your off hours. Evenings, your one weekday off each week, Sundays. You use the cockpit. You log every call. You hand warm leads to Alex if you don't want to close them yourself, or you close them yourself if you do."
+"The shift we need covered is mornings. East Coast manufacturing shops open at 7, 8 AM their time. Arizona is two or three hours behind depending on daylight savings. So you're getting on the phone at 5 or 6 AM Arizona time, working until 8 or 9, and then heading to the dealership for your normal day."
 
-"What we give you: commission on every deal you close. The full Nucleus Phone toolkit, no fee. Pre-scored lists, so you never cold call blind. Product training from the CAS engineers. And zero commitment. No contract. Try it for a month, see if it works."
+"That's two to three hours a morning, five days a week. You're hitting shops in Eastern and Central time zones while the owner is at his desk with coffee, before his day gets crazy. That window is gold for connecting with decision makers."
 
-"There's no quota. There's no schedule. There's no minimum. You do it when you can. If you can only put in five hours a week, that's fine. If you want to do twenty, that's also fine. Your call."
+**Pause. Read his reaction. This is the make-or-break moment. If 5 AM is a dealbreaker, you need to know now.**
 
-"The only real expectation is: when you ARE working, you use the system, you log the activity, and you represent Joruva with the professionalism that Britt knows you already have."
+"I know that's early. But here's why it works. Shop owners are reachable before 8 AM their time because they're not on the floor yet. By 9 AM they're running machines and you can't get them. The morning window is the highest-connect-rate time in industrial sales. And you're done before your day job starts."
+
+"What we give you: commission on every deal you close. The full Nucleus Phone toolkit, no fee. Pre-scored lists, so you never cold call blind. Product training from the CAS engineers."
+
+"When you ARE working, you use the cockpit, you log every call, and you hand warm leads to Alex if you don't want to close them yourself. Or you close them yourself if you do."
+
+"And here's the bigger picture. This starts as a morning shift alongside the dealership. But if the volume is there and the deals are closing, the conversation becomes: do you want to do this full time? Because Paul and I would rather have a full-time guy who's proven he can sell this stuff than keep asking somebody to squeeze it in around another job. The path is there if you want it."
+
+**Ask directly:**
+
+"So let me ask you straight. How do you feel about early mornings? Is 5, 6 AM something you can commit to, or is that a non-starter?"
+
+**Listen carefully. You're gauging two things: (1) can he physically do mornings, and (2) is he motivated enough by the full-time carrot to push through it.**
 
 ---
 
@@ -173,9 +187,11 @@
 
 **Scroll to the Realistic Scenario box.**
 
-"Here's the realistic picture of what this looks like month to month. Your first month, you're ramping. You're getting the hang of the cockpit, getting used to the conversations. Maybe fifteen hundred bucks. By month three, you're steady state, closing two or three small rotary screw deals a month, you're at three grand. And if you close ONE permanent magnet VFD deal in a quarter, you're over five grand in that month."
+"Here's the realistic picture of what this looks like month to month. Your first month, you're ramping. Getting the hang of the cockpit, getting used to the conversations, figuring out the morning rhythm. Maybe fifteen hundred bucks. By month three, you're steady state, closing two or three small rotary screw deals a month, you're at three grand. And if you close ONE permanent magnet VFD deal in a quarter, you're over five grand in that month."
 
-"This is working eight to ten hours a week. Evenings and a Sunday here and there. It's a side gig that pays like a real job."
+"That's working ten to fifteen hours a week. Two to three hours every morning before you head to the dealership. And when the commission checks start stacking up, the math starts to look like: why am I still selling used cars?"
+
+"That's the conversation Paul and I want to have in three months. If the numbers are working, we bring you on full time, you drop the dealership, and this becomes your thing."
 
 **Important — address Alex comparison naturally.**
 
@@ -195,13 +211,19 @@
 
 "Two: Britt walks you through Nucleus Phone. One thirty-minute session, she shows you the cockpit, the dialer, the disposition workflow. You'll be up to speed fast."
 
-"Three: you start calling. Start with ten warm leads off the signal pipeline. Get a feel for it. See what the cockpit does during a real call. Tell us what works and what doesn't."
+"Three: you pick a morning next week and do a trial run. Get on at 6 AM, work the East Coast list for two hours, see how it feels. No pressure, no commitment, just see if the rhythm works."
 
-"Try it for a month. No contract, no paperwork beyond the standard independent contractor agreement. If it doesn't click, we shake hands and say thanks for trying it. If it does, we've both got a good thing going."
+"Give it a month of mornings. No contract, no paperwork beyond the standard independent contractor agreement. If it doesn't click, we shake hands and say thanks for trying it. If the numbers start working, that's when we talk about making this your full-time gig."
 
-**Close with direct question.**
+**Close with two direct questions. The first gauges commitment, the second gauges motivation.**
 
 "What questions do you have for me?"
+
+**After he asks his questions, close with:**
+
+"Last thing. And I'm asking because it matters for how we set this up. If the money was right, is leaving the dealership something you'd actually want to do? Or do you see this as a permanent side thing?"
+
+**His answer here tells you everything. If he lights up at the idea of quitting, he's your guy. If he hedges, he's a part-timer and you calibrate expectations accordingly.**
 
 ---
 
@@ -221,7 +243,11 @@
 
 ### "What hours work best?"
 
-"Shop owners are easier to reach before 8 AM or after 5 PM because they're on the floor during the day. Evenings are gold. Your Sunday is actually a great day for Pacific time zone shops because they're open Sunday afternoons. Your random weekday off is perfect for daytime calls to the rest of the country."
+"The morning window is the money window. East Coast shops open at 7 or 8 AM their time, which is 5 or 6 AM here. Shop owners are at their desk before the floor gets going. By 9 AM their time they're unreachable. So your 5 to 8 AM Arizona block is the highest-connect-rate window in the industry. Your random weekday off and Sundays are bonus time for Central and Pacific zones."
+
+### "What does full-time look like?"
+
+"If in three months you're consistently closing two to three deals a month and bringing in three to five grand in commission, that's when Paul and I sit down with you and talk about full-time. Full-time means you're working the full day, not just mornings. East Coast in the morning, Central midday, Pacific in the afternoon. Your earning potential roughly triples because you're covering the whole country across all time zones. At that point you're not squeezing it in around the dealership, this IS the job."
 
 ### "How do I get paid?"
 
@@ -253,11 +279,15 @@
 
 "What would make you want to try it?"
 
-**If yes:** "Great. I'll get you the paperwork Monday, Britt will reach out for onboarding, and we'll have you calling by end of week."
+**If yes:** "Great. I'll get you the paperwork Monday, Britt will reach out for onboarding, and we'll pick a morning next week for your first trial run. You'll be calling before the week is out."
 
-**If maybe:** "Totally fair. Take a few days, talk to Britt, think about it. I'll check in with you Wednesday."
+**If maybe:** "Totally fair. The morning thing is the big question. Sleep on it, talk to Britt, think about whether you can make 6 AM work. I'll check in with you Wednesday."
 
 **If no:** "Appreciate the time. Tell Britt we had a good conversation. Door's open if you change your mind down the road."
+
+**If yes to mornings but no to full-time ambition:** He's still useful as a part-time morning caller, but calibrate internally. He won't push as hard without the carrot. Still worth a month trial.
+
+**If yes to full-time ambition:** This is your guy. Push the onboarding fast, get him calling this week, and check in after week one to see if the morning rhythm held.
 
 ---
 
