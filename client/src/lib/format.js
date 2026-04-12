@@ -62,12 +62,12 @@ export function formatRelativeTime(dateStr) {
   startOfYesterday.setDate(startOfYesterday.getDate() - 1);
 
   if (d >= startOfToday) {
-    return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
   if (d >= startOfYesterday) {
-    return 'Yesterday ' + d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return 'Yesterday ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   }
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 // Day-granularity variant: "Today" / "Yesterday" / "3d ago" / "2w ago" / "Mar 25".
