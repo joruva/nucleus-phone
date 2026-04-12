@@ -26,6 +26,7 @@ import CompanyVernacular from '../components/cockpit/CompanyVernacular';
 import DataSourceIndicator from '../components/ui/DataSourceIndicator';
 import useLiveAnalysis from '../hooks/useLiveAnalysis';
 import TestScenarioButton from '../components/cockpit/TestScenarioButton';
+import { getNextUncalled } from '../lib/api';
 
 function deriveCallPhase(twilioStatus, callData) {
   if (twilioStatus === 'connecting' || twilioStatus === 'ringing' || twilioStatus === 'connected')
@@ -183,6 +184,7 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId, o
   const [historyKey, setHistoryKey] = useState(0);
   const [activeSimCallId, setActiveSimCallId] = useState(null);
   const [testCallId, setTestCallId] = useState(null);
+  const [skipLoading, setSkipLoading] = useState(false);
 
   const callPhase = deriveCallPhase(twilioStatus, callState.callData);
 
@@ -234,6 +236,30 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId, o
 
   function handleSaveNext() {
     navigate('/complete');
+  }
+
+  const skipAbort = useRef(null);
+  useEffect(() => () => skipAbort.current?.abort(), []);
+  async function handleSkip() {
+    skipAbort.current?.abort();
+    const ac = new AbortController();
+    skipAbort.current = ac;
+    setSkipLoading(true);
+    try {
+      const currentPhone = data?.identity?.phone || null;
+      const { next } = await getNextUncalled(currentPhone, ac.signal);
+      if (ac.signal.aborted) return;
+      if (next?.phone) {
+        navigate(`/cockpit/${encodeURIComponent(next.phone)}`);
+      } else {
+        alert('No more uncalled contacts in the pipeline.');
+      }
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      alert('Failed to find next contact: ' + err.message);
+    } finally {
+      setSkipLoading(false);
+    }
   }
 
   function handleScoreComplete() {
@@ -361,6 +387,8 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId, o
               onCallNow={handleCallNow}
               onEndCall={handleEndCall}
               onSaveNext={handleSaveNext}
+              onSkip={handleSkip}
+              skipLoading={skipLoading}
               disabled={twilioStatus !== 'ready'}
               onSendDigits={onSendDigits}
               onToggleMute={onToggleMute}

@@ -19,6 +19,52 @@ const SIM_MIKE_GARZA_BY_DIFFICULTY = {
 
 const router = Router();
 
+// GET /api/cockpit/next-uncalled — find next signal-scored contact without a
+// completed call. Returns { next: { phone, full_name, company_name, signal_tier,
+// signal_score } } or { next: null } when the queue is empty.
+// Must be defined BEFORE /:identifier to avoid route shadowing.
+router.get('/next-uncalled', apiKeyAuth, rbac('external_caller'), async (req, res) => {
+  const { exclude } = req.query; // phone number of the current contact to skip past
+
+  try {
+    const params = [];
+    let excludeClause = '';
+    if (exclude) {
+      // Strip to last 7 digits for format-agnostic comparison
+      const digits = exclude.replace(/\D/g, '').slice(-7);
+      if (digits.length === 7) {
+        params.push(digits);
+        excludeClause = `AND RIGHT(REGEXP_REPLACE(pb.phone, '\\D', '', 'g'), 7) != $${params.length}`;
+      }
+    }
+
+    const { rows } = await pool.query(
+      `SELECT pb.phone, pb.full_name, lr.company_name,
+              sm.signal_tier, sm.signal_score
+       FROM v35_pb_contacts pb
+       JOIN v35_signal_metadata sm ON sm.domain = pb.domain
+       JOIN v35_lead_reservoir lr ON lr.domain = pb.domain
+       WHERE pb.phone IS NOT NULL
+         AND pb.phone_type IN ('mobile', 'direct')
+         AND pb.domain IS NOT NULL
+         ${excludeClause}
+         AND NOT EXISTS (
+           SELECT 1 FROM nucleus_phone_calls npc
+           WHERE npc.status = 'completed'
+             AND npc.lead_phone LIKE '%' || RIGHT(REGEXP_REPLACE(pb.phone, '\\D', '', 'g'), 7)
+         )
+       ORDER BY sm.signal_score DESC NULLS LAST
+       LIMIT 1`,
+      params,
+    );
+
+    res.json({ next: rows[0] || null });
+  } catch (err) {
+    console.error('Next-uncalled lookup failed:', err.message);
+    res.status(500).json({ error: 'Failed to find next contact' });
+  }
+});
+
 // GET /api/cockpit/:identifier — full pre-call briefing. Open to any logged-in
 // caller (including external_caller) — cockpit data is lead-scoped, not
 // rep-scoped, and external reps need the briefing to make the call.

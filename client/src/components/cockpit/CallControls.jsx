@@ -3,7 +3,7 @@ import { formatTime } from '../../lib/format';
 
 const DIGITS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 
-export default function CallControls({ callPhase, timer, onCallNow, onEndCall, onSaveNext, disabled, onSendDigits, onToggleMute, muted }) {
+export default function CallControls({ callPhase, timer, onCallNow, onEndCall, onSaveNext, onSkip, skipLoading, disabled, onSendDigits, onToggleMute, muted }) {
   const [showKeypad, setShowKeypad] = useState(false);
   const keypadRef = useRef(null);
   const toggleRef = useRef(null);
@@ -84,14 +84,28 @@ export default function CallControls({ callPhase, timer, onCallNow, onEndCall, o
 
       <div className="flex items-center justify-center gap-3 px-4 py-2">
         {callPhase === 'pre' && (
-          <button
-            onClick={onCallNow}
-            disabled={disabled}
-            className="w-full max-w-[400px] py-3 rounded text-sm font-semibold text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
-            style={{ background: 'var(--cockpit-blue-500)' }}
-          >
-            📞 Call now
-          </button>
+          <div className="flex items-center gap-3 w-full max-w-[500px]">
+            <button
+              onClick={onCallNow}
+              disabled={disabled}
+              className="flex-1 py-3 rounded text-sm font-semibold text-white flex items-center justify-center gap-2 transition-opacity disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+              style={{ background: 'var(--cockpit-blue-500)' }}
+            >
+              📞 Call now
+            </button>
+            <button
+              onClick={onSkip}
+              disabled={skipLoading}
+              className="px-4 py-3 rounded text-sm font-medium cursor-pointer transition-opacity disabled:opacity-40 shrink-0"
+              style={{
+                background: 'var(--cockpit-card)',
+                border: '1px solid var(--cockpit-card-border)',
+                color: 'var(--cockpit-text-muted)',
+              }}
+            >
+              {skipLoading ? 'Loading...' : 'Skip →'}
+            </button>
+          </div>
         )}
 
         {callPhase === 'active' && (

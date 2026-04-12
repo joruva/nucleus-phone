@@ -131,6 +131,11 @@ export function getCockpit(identifier, signal, { difficulty } = {}) {
   return apiFetch(`/cockpit/${encodeURIComponent(identifier)}${params}`, { signal });
 }
 
+export function getNextUncalled(excludePhone, signal) {
+  const params = excludePhone ? `?exclude=${encodeURIComponent(excludePhone)}` : '';
+  return apiFetch(`/cockpit/next-uncalled${params}`, { signal });
+}
+
 export function refreshCockpit(identifier, signal, { difficulty } = {}) {
   const params = difficulty ? `?refresh=true&difficulty=${difficulty}` : '?refresh=true';
   return apiFetch(`/cockpit/${encodeURIComponent(identifier)}${params}`, { signal });
