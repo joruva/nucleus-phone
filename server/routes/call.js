@@ -4,6 +4,7 @@ const twilio = require('twilio');
 const { pool } = require('../db');
 const { client } = require('../lib/twilio');
 const { apiKeyAuth } = require('../middleware/auth');
+const { rbac, hasMinRole } = require('../middleware/rbac');
 const {
   createConference, getConference, updateConference,
   removeConference, listActiveConferences, claimLeadDial,
@@ -12,6 +13,21 @@ const { cleanupCall } = require('../lib/live-analysis');
 const { sendSlackAlert } = require('../lib/slack');
 
 const router = Router();
+
+// Rep-facing endpoints need auth + at least external_caller. /status is a
+// Twilio webhook validated by signature, so it explicitly bypasses this.
+const callerGuard = [apiKeyAuth, rbac('external_caller')];
+
+// Require session-auth callers (non-admin) to operate only on their own
+// identity. Admin principals (API key or admin role) bypass this check so
+// automation and debugging still work.
+function enforceOwnIdentity(req, res, bodyIdentity) {
+  if (!req.user) return false;
+  if (hasMinRole(req.user.role, 'admin')) return true;
+  if (!bodyIdentity || bodyIdentity === req.user.identity) return true;
+  res.status(403).json({ error: 'callerIdentity must match your own identity' });
+  return false;
+}
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
 const twilioWebhook = twilio.webhook({
   validate: process.env.NODE_ENV === 'production',
@@ -21,7 +37,7 @@ const twilioWebhook = twilio.webhook({
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 
 // POST /api/call/initiate — start a new call
-router.post('/initiate', apiKeyAuth, async (req, res) => {
+router.post('/initiate', ...callerGuard, async (req, res) => {
   const { to, contactName, companyName, contactId, callerIdentity } = req.body;
 
   if (!to || !callerIdentity) {
@@ -31,6 +47,9 @@ router.post('/initiate', apiKeyAuth, async (req, res) => {
   if (!E164_RE.test(to)) {
     return res.status(400).json({ error: 'to must be E.164 format (e.g. +16025551234)' });
   }
+
+  // Non-admin callers can only initiate as themselves.
+  if (!enforceOwnIdentity(req, res, callerIdentity)) return;
 
   const conferenceName = `nucleus-call-${uuidv4()}`;
 
@@ -117,7 +136,7 @@ async function dialLeadWhenReady(conferenceName, leadPhone, dbRowId) {
 }
 
 // POST /api/call/join — admin joins an active conference
-router.post('/join', apiKeyAuth, (req, res) => {
+router.post('/join', ...callerGuard, (req, res) => {
   const { conferenceName, callerIdentity, muted } = req.body;
 
   const conf = getConference(conferenceName);
@@ -129,12 +148,18 @@ router.post('/join', apiKeyAuth, (req, res) => {
 });
 
 // POST /api/call/mute — toggle participant mute via Twilio REST API
-router.post('/mute', apiKeyAuth, async (req, res) => {
+router.post('/mute', ...callerGuard, async (req, res) => {
   const { conferenceName, participantCallSid, muted } = req.body;
 
   const conf = getConference(conferenceName);
   if (!conf || !conf.conferenceSid) {
     return res.status(404).json({ error: 'Conference not found' });
+  }
+
+  if (req.user && !hasMinRole(req.user.role, 'admin')) {
+    if (conf.callerIdentity && conf.callerIdentity !== req.user.identity) {
+      return res.status(403).json({ error: 'Not your conference' });
+    }
   }
 
   try {
@@ -151,7 +176,7 @@ router.post('/mute', apiKeyAuth, async (req, res) => {
 
 // GET /api/call/active — list active conferences with participants
 // Admins also see in-progress practice calls.
-router.get('/active', apiKeyAuth, async (req, res) => {
+router.get('/active', ...callerGuard, async (req, res) => {
   const conferences = listActiveConferences();
 
   const enriched = await Promise.all(
@@ -219,13 +244,20 @@ router.get('/active', apiKeyAuth, async (req, res) => {
   res.json({ calls: enriched });
 });
 
-// POST /api/call/end — end a conference
-router.post('/end', apiKeyAuth, async (req, res) => {
+// POST /api/call/end — end a conference. Non-admin users can only end their
+// own conferences (identified by conf.callerIdentity from createConference).
+router.post('/end', ...callerGuard, async (req, res) => {
   const { conferenceName } = req.body;
 
   const conf = getConference(conferenceName);
   if (!conf || !conf.conferenceSid) {
     return res.status(404).json({ error: 'Conference not found' });
+  }
+
+  if (req.user && !hasMinRole(req.user.role, 'admin')) {
+    if (conf.callerIdentity && conf.callerIdentity !== req.user.identity) {
+      return res.status(403).json({ error: 'Not your conference' });
+    }
   }
 
   try {

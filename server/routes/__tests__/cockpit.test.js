@@ -26,11 +26,21 @@ const { resolve } = require('../../lib/identity-resolver');
 const { lookupCustomer } = require('../../lib/customer-lookup');
 const { getCompany } = require('../../lib/hubspot');
 const { generateRapportIntel, clearCache } = require('../../lib/claude');
+const { __testSetUser } = require('../../middleware/auth');
 
 const API_KEY = 'test-api-key';
 
+let nextUserId = 2000;
 function mockSession(identity = 'tom', role = 'admin') {
-  jwt.verify.mockReturnValue({ identity, role, email: `${identity}@joruva.com` });
+  const id = nextUserId++;
+  __testSetUser({
+    id,
+    email: `${identity}@joruva.com`,
+    identity,
+    role,
+    displayName: identity,
+  });
+  jwt.verify.mockReturnValue({ userId: id });
 }
 
 const MOCK_IDENTITY = {

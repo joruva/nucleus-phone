@@ -18,6 +18,8 @@ const { normalizeCompanyName } = require('./company-normalizer');
 const APOLLO_DAILY_BUDGET = 50; // Matches V3.5 CAPACITY.DAILY_BUDGET.apollo (Basic plan: 1K credits/mo)
 const BUDGET_EXHAUSTED_PCT = 0.95; // Stop at 95% to leave headroom for V3.5 pipeline
 const VALID_TIERS = new Set(['spear', 'targeted']);
+const STALE_JOB_MINUTES = 10;
+const ENRICHMENT_LOCK_KEY = 839271; // pg_advisory_lock key for signal enrichment exclusion
 
 /**
  * Check remaining Apollo budget for today.
@@ -72,26 +74,16 @@ async function incrementApolloBudget(amount = 1) {
  * @param {string} [opts.jobId] - Existing job ID to resume, or null to create new
  * @returns {Promise<Object>} Job result summary
  */
-async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = null, jobId = null } = {}) {
-  // Validate tiers
+async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = null, jobId } = {}) {
+  if (!jobId) throw new Error('jobId required — call claimEnrichmentSlot() first');
+
   const validTiers = tiers.filter(t => VALID_TIERS.has(t));
   if (validTiers.length === 0) throw new Error('No valid tiers provided');
 
-  // Create or resume job
-  if (!jobId) {
-    const result = await pool.query(
-      `INSERT INTO signal_enrichment_jobs (tiers, status)
-       VALUES ($1, 'running')
-       RETURNING id`,
-      [validTiers],
-    );
-    jobId = result.rows[0].id;
-  } else {
-    await pool.query(
-      `UPDATE signal_enrichment_jobs SET status = 'running' WHERE id = $1`,
-      [jobId],
-    );
-  }
+  await pool.query(
+    `UPDATE signal_enrichment_jobs SET status = 'running', heartbeat_at = NOW() WHERE id = $1`,
+    [jobId],
+  );
 
   try {
     // Find companies that need enrichment (no Apollo contacts yet)
@@ -245,7 +237,7 @@ async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = 
 async function updateJobProgress(jobId, status, processed, creditsUsed, lastDomain) {
   await pool.query(
     `UPDATE signal_enrichment_jobs
-     SET status = $2, processed_companies = $3, credits_used = $4, last_processed_domain = $5
+     SET status = $2, processed_companies = $3, credits_used = $4, last_processed_domain = $5, heartbeat_at = NOW()
      WHERE id = $1`,
     [jobId, status, processed, creditsUsed, lastDomain],
   );
@@ -262,4 +254,58 @@ async function getJobStatus(jobId) {
   return result.rows[0] || null;
 }
 
-module.exports = { runBatchEnrichment, getJobStatus, checkApolloBudget };
+/**
+ * Claim a job slot. Uses pg_try_advisory_xact_lock to serialize the check-then-insert
+ * (prevents TOCTOU race on concurrent POSTs). The lock releases at COMMIT — ongoing
+ * enrichment is guarded by the heartbeat_at check, not the advisory lock.
+ * Returns jobId or throws {code: 'CONCURRENT_JOB'}.
+ */
+async function claimEnrichmentSlot(tiers) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const lockResult = await client.query(
+      'SELECT pg_try_advisory_xact_lock($1) AS acquired',
+      [ENRICHMENT_LOCK_KEY],
+    );
+    if (!lockResult.rows[0].acquired) {
+      await client.query('ROLLBACK');
+      throw Object.assign(
+        new Error('Enrichment job already running (lock contention)'),
+        { code: 'CONCURRENT_JOB', activeJobId: 'unknown' },
+      );
+    }
+
+    // Check for a live running job (heartbeat within stale threshold)
+    const active = await client.query(
+      `SELECT id FROM signal_enrichment_jobs
+       WHERE status = 'running'
+         AND heartbeat_at > NOW() - make_interval(mins => $1)
+       LIMIT 1`,
+      [STALE_JOB_MINUTES],
+    );
+    if (active.rows.length > 0) {
+      await client.query('ROLLBACK');
+      throw Object.assign(
+        new Error(`Enrichment job already running (${active.rows[0].id})`),
+        { code: 'CONCURRENT_JOB', activeJobId: active.rows[0].id },
+      );
+    }
+
+    const result = await client.query(
+      `INSERT INTO signal_enrichment_jobs (tiers, status, heartbeat_at)
+       VALUES ($1, 'running', NOW())
+       RETURNING id`,
+      [tiers],
+    );
+    await client.query('COMMIT');
+    return result.rows[0].id;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { runBatchEnrichment, getJobStatus, checkApolloBudget, claimEnrichmentSlot };

@@ -6,7 +6,8 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const { initSchema } = require('./db');
 const { errorHandler } = require('./middleware/error');
-const { apiKeyAuth } = require('./middleware/auth');
+const { apiKeyAuth, sessionAuth } = require('./middleware/auth');
+const { rbac } = require('./middleware/rbac');
 const { startSweep } = require('./lib/stale-sweep');
 const { attachWebSocket } = require('./lib/live-analysis');
 const { startScheduler: startCurator } = require('./lib/equipment-curator');
@@ -39,7 +40,16 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 
 // Routes
-app.use('/api/token', apiKeyAuth, require('./routes/token'));
+//
+// RBAC policy (nucleus-phone-e5p):
+//   • Webhooks (voice, transcription, call/recording-status, apollo-webhook)
+//     authenticate via vendor signature, NOT RBAC.
+//   • Route files that needed uniform policy apply router.use(auth + rbac)
+//     inside themselves (signals, contacts, sim, ask, call). Route files
+//     with mixed per-endpoint policy handle their own guards (history,
+//     scoreboard, cockpit, token).
+//   • Admin-only mounts apply rbac('admin') here.
+app.use('/api/token', apiKeyAuth, rbac('external_caller'), require('./routes/token'));
 app.use('/api/voice/incoming', require('./routes/incoming'));
 app.use('/api/voice', require('./routes/voice'));
 app.use('/api/call', require('./routes/call'));
@@ -51,13 +61,13 @@ app.use('/api/fireflies-sync', require('./routes/fireflies-sync'));
 app.use('/api/scoreboard', require('./routes/scoreboard'));
 app.use('/api/sim', require('./routes/sim'));
 app.use('/api/transcription', require('./routes/transcription'));
-app.use('/api/equipment', apiKeyAuth, require('./routes/equipment'));
-app.use('/api/curation', apiKeyAuth, require('./routes/curation'));
-const { sessionAuth } = require('./middleware/auth');
-app.use('/api/quote-request', sessionAuth, require('./routes/quote-request'));
+app.use('/api/equipment', apiKeyAuth, rbac('admin'), require('./routes/equipment'));
+app.use('/api/curation', apiKeyAuth, rbac('admin'), require('./routes/curation'));
+app.use('/api/quote-request', sessionAuth, rbac('external_caller'), require('./routes/quote-request'));
 app.use('/api/signals', require('./routes/signals'));
 app.use('/api/ask', require('./routes/ask'));
 app.use('/api/apollo/phone-webhook', require('./routes/apollo-webhook'));
+app.use('/api/admin', apiKeyAuth, rbac('admin'), require('./routes/admin'));
 
 // Serve React build in production
 const clientDist = path.join(__dirname, '..', 'client', 'dist');

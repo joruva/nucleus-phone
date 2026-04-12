@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { apiKeyAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { pool } = require('../db');
 const { resolve } = require('../lib/identity-resolver');
 const { lookupCustomer } = require('../lib/customer-lookup');
@@ -18,8 +19,10 @@ const SIM_MIKE_GARZA_BY_DIFFICULTY = {
 
 const router = Router();
 
-// GET /api/cockpit/:identifier — full pre-call briefing
-router.get('/:identifier', apiKeyAuth, async (req, res) => {
+// GET /api/cockpit/:identifier — full pre-call briefing. Open to any logged-in
+// caller (including external_caller) — cockpit data is lead-scoped, not
+// rep-scoped, and external reps need the briefing to make the call.
+router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res) => {
   const { identifier } = req.params;
   const refresh = req.query.refresh === 'true';
 
@@ -223,7 +226,8 @@ router.get('/:identifier', apiKeyAuth, async (req, res) => {
     }
 
     // Strip AI fields from priorCalls for API-key callers. See CLAUDE.md:70.
-    const responsePriorCalls = req.user
+    // Browser sessions get the full thing; API-key automation doesn't.
+    const responsePriorCalls = req.user?.authSource === 'session'
       ? priorCalls
       : priorCalls.map(({ ai_summary, ai_action_items, ...rest }) => rest);
 

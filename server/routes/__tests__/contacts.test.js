@@ -11,11 +11,21 @@ const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const { pool } = require('../../db');
 const hubspot = require('../../lib/hubspot');
+const { __testSetUser } = require('../../middleware/auth');
 
 const API_KEY = 'test-api-key';
 
+let nextUserId = 3000;
 function mockSession(identity = 'tom', role = 'admin') {
-  jwt.verify.mockReturnValue({ identity, role, email: `${identity}@joruva.com` });
+  const id = nextUserId++;
+  __testSetUser({
+    id,
+    email: `${identity}@joruva.com`,
+    identity,
+    role,
+    displayName: identity,
+  });
+  jwt.verify.mockReturnValue({ userId: id });
 }
 
 let app;

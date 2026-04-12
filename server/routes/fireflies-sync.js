@@ -1,11 +1,13 @@
 const { Router } = require('express');
 const { apiKeyAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { sync } = require('../lib/fireflies-sync');
 
 const router = Router();
 
-// POST /api/fireflies-sync — triggered by n8n cron every 30 min
-router.post('/', apiKeyAuth, async (req, res) => {
+// POST /api/fireflies-sync — triggered by n8n cron every 30 min. Admin-only;
+// n8n uses the API key which resolves to the synthetic admin principal.
+router.post('/', apiKeyAuth, rbac('admin'), async (req, res) => {
   try {
     const result = await sync();
     res.json(result);

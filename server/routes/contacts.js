@@ -1,11 +1,17 @@
 const { Router } = require('express');
 const { apiKeyAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { searchContacts, getContact } = require('../lib/hubspot');
 const { pool } = require('../db');
 const { getSignalContacts, getContactsForDomain } = require('../lib/signal-contacts');
 const { TIMEZONE_GROUPS } = require('../lib/timezones');
 
 const router = Router();
+
+// Every contact route is available to external_caller — reps need the call
+// list + signal-scored contacts to do their job. Admin-only data (pipeline
+// management, credit spend) lives under /api/signals instead.
+router.use(apiKeyAuth, rbac('external_caller'));
 
 const VALID_TIERS = new Set(['spear', 'targeted', 'awareness']);
 const VALID_TIMEZONES = new Set(Object.keys(TIMEZONE_GROUPS));
@@ -100,7 +106,7 @@ router.get('/', apiKeyAuth, async (req, res) => {
         // Sensitive AI data (lastSummary) is only exposed to session-authed
         // browser callers, matching the /api/history policy at CLAUDE.md:70.
         // API-key callers (e.g. n8n, external tools) get call metadata only.
-        const includeSummary = !!req.user;
+        const includeSummary = req.user?.authSource === 'session';
 
         for (const row of result.rows) {
           const key = row.hubspot_contact_id || row.lead_phone;

@@ -334,6 +334,9 @@ async function initSchema() {
         error TEXT
       );
     `);
+    await client.query(`
+      ALTER TABLE signal_enrichment_jobs ADD COLUMN IF NOT EXISTS heartbeat_at TIMESTAMPTZ;
+    `);
     console.log('signal enrichment schema ready');
 
     // ── Full-text search index for call summaries ────────────────
@@ -372,6 +375,56 @@ async function initSchema() {
         FOR EACH ROW EXECUTE FUNCTION update_ask_conv_ts();
     `);
     console.log('ask_nucleus_conversations table ready');
+
+    // ── RBAC users ───────────────────────────────────────────────
+    // nucleus-phone-e5p: DB-backed users replace the hardcoded USER_MAP so we
+    // can instantly revoke access by flipping is_active=false. The sessionAuth
+    // middleware re-reads this row (with a 5s cache) on every request.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS nucleus_phone_users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        identity VARCHAR(50) UNIQUE NOT NULL,
+        role VARCHAR(32) NOT NULL DEFAULT 'caller'
+          CHECK (role IN ('external_caller', 'caller', 'admin')),
+        display_name VARCHAR(255) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_npu_email_active ON nucleus_phone_users(email) WHERE is_active = TRUE;
+
+      CREATE OR REPLACE FUNCTION update_npu_ts()
+      RETURNS TRIGGER AS $$
+      BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_npu_ts ON nucleus_phone_users;
+      CREATE TRIGGER trg_npu_ts
+        BEFORE UPDATE ON nucleus_phone_users
+        FOR EACH ROW EXECUTE FUNCTION update_npu_ts();
+    `);
+
+    // Seed internal @joruva.com users — idempotent, preserves is_active if
+    // a user has been manually deactivated in a prior run.
+    const SEED_USERS = [
+      ['tom@joruva.com',   'tom',   'admin',  'Tom Russo'],
+      ['paul@joruva.com',  'paul',  'admin',  'Paul Johnson'],
+      ['kate@joruva.com',  'kate',  'caller', 'Kate Russo'],
+      ['britt@joruva.com', 'britt', 'caller', 'Britt'],
+      ['ryann@joruva.com', 'ryann', 'caller', 'Ryann Johnson'],
+      ['alex@joruva.com',  'alex',  'caller', 'Alex'],
+      ['lily@joruva.com',  'lily',  'caller', 'Lily'],
+    ];
+    for (const [email, identity, role, displayName] of SEED_USERS) {
+      await client.query(
+        `INSERT INTO nucleus_phone_users (email, identity, role, display_name)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (email) DO NOTHING`,
+        [email, identity, role, displayName]
+      );
+    }
+    console.log('nucleus_phone_users table ready');
 
   } finally {
     client.release();

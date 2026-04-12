@@ -1,20 +1,34 @@
 const { Router } = require('express');
 const { generateAccessToken } = require('../lib/twilio');
-const { VALID_IDENTITIES } = require('./auth');
+const { isValidIdentity } = require('./auth');
 
 const router = Router();
 
-router.get('/', (req, res) => {
-  // Session auth: identity comes from JWT (already validated at login).
-  // API key auth: identity comes from query param, validated against whitelist.
-  // Defense-in-depth: validate against whitelist regardless of auth method.
-  const identity = req.user?.identity || req.query.identity;
+router.get('/', async (req, res) => {
+  // Session auth: identity ALWAYS comes from req.user — a logged-in caller
+  // cannot request a Twilio token for a different identity. This prevents
+  // Blake from generating tokens as Kate even if he knows her identity string.
+  //
+  // API key auth: identity comes from query param. The API key is a shared
+  // server-to-server secret and is trusted to act as any identity.
+  let identity;
+  if (req.user && req.user.id !== 0) {
+    identity = req.user.identity;
+  } else {
+    identity = req.query.identity;
+  }
+
   if (!identity) {
     return res.status(400).json({ error: 'identity required' });
   }
 
-  if (!VALID_IDENTITIES.has(identity)) {
-    return res.status(403).json({ error: 'Invalid identity' });
+  try {
+    if (!(await isValidIdentity(identity))) {
+      return res.status(403).json({ error: 'Invalid identity' });
+    }
+  } catch (err) {
+    console.error('Identity validation failed:', err.message);
+    return res.status(500).json({ error: 'Identity validation failed' });
   }
 
   try {

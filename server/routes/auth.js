@@ -1,25 +1,41 @@
 const { Router } = require('express');
 const msal = require('@azure/msal-node');
 const jwt = require('jsonwebtoken');
-const { sessionAuth } = require('../middleware/auth');
+const { sessionAuth, SESSION_TTL_SECONDS } = require('../middleware/auth');
 const { pool } = require('../db');
 const { encrypt } = require('../lib/crypto');
 
 const router = Router();
 
-// Email → { identity, role, displayName } mapping. Only @joruva.com emails allowed.
-const USER_MAP = {
-  'tom@joruva.com': { identity: 'tom', role: 'admin', displayName: 'Tom Russo' },
-  'paul@joruva.com': { identity: 'paul', role: 'admin', displayName: 'Paul Johnson' },
-  'kate@joruva.com': { identity: 'kate', role: 'caller', displayName: 'Kate Russo' },
-  'britt@joruva.com': { identity: 'britt', role: 'caller', displayName: 'Britt' },
-  'ryann@joruva.com': { identity: 'ryann', role: 'caller', displayName: 'Ryann Johnson' },
-  'alex@joruva.com': { identity: 'alex', role: 'caller', displayName: 'Alex' },
-  'lily@joruva.com': { identity: 'lily', role: 'caller', displayName: 'Lily' },
-};
+// Look up an active user by email. Returns null if no row or is_active=false.
+// This replaces the pre-e5p hardcoded USER_MAP — identity/role/display_name
+// now live in nucleus_phone_users so admins can revoke or add users without
+// a deploy.
+async function findActiveUserByEmail(email) {
+  const { rows } = await pool.query(
+    `SELECT id, email, identity, role, display_name
+     FROM nucleus_phone_users
+     WHERE email = $1 AND is_active = TRUE`,
+    [email]
+  );
+  return rows[0] || null;
+}
 
-// Valid Twilio identities — used by token endpoint to reject arbitrary strings.
-const VALID_IDENTITIES = new Set(Object.values(USER_MAP).map(u => u.identity));
+// Identity whitelist for the Twilio token endpoint — checks the DB. Cached
+// briefly to avoid a round-trip on every token request during an active session.
+const identityCache = { set: new Set(), at: 0 };
+const IDENTITY_CACHE_TTL_MS = 60 * 1000;
+
+async function isValidIdentity(identity) {
+  if (Date.now() - identityCache.at > IDENTITY_CACHE_TTL_MS) {
+    const { rows } = await pool.query(
+      `SELECT identity FROM nucleus_phone_users WHERE is_active = TRUE`
+    );
+    identityCache.set = new Set(rows.map(r => r.identity));
+    identityCache.at = Date.now();
+  }
+  return identityCache.set.has(identity);
+}
 
 const SCOPES = ['User.Read', 'openid', 'profile', 'email', 'Mail.Send', 'offline_access'];
 
@@ -76,20 +92,20 @@ router.get('/callback', async (req, res) => {
     const email = (claims.preferred_username || claims.email || '').toLowerCase();
     const tid = claims.tid;
 
-    // Validate tenant
+    // Validate tenant — must be a member of the joruva Entra tenant.
+    // Note: Entra B2B guest users authenticate with their home-tenant `tid`,
+    // so this check intentionally excludes guests. External users (e.g. Blake)
+    // must be provisioned as cloud-only @joruva.com accounts, not B2B guests,
+    // until/unless we extend this check to accept guest tokens.
     if (tid !== process.env.ENTRA_TENANT_ID) {
       return res.status(403).send('Invalid tenant');
     }
 
-    // Validate domain
-    if (!email.endsWith('@joruva.com')) {
-      return res.status(403).send('Only joruva.com accounts are allowed');
-    }
-
-    // Look up user
-    const user = USER_MAP[email];
+    // Look up user in the DB. The domain is no longer hard-coded — the
+    // authoritative check is "does an active nucleus_phone_users row exist".
+    const user = await findActiveUserByEmail(email);
     if (!user) {
-      return res.status(403).send(`No Nucleus Phone account for ${email}`);
+      return res.status(403).send(`No active Nucleus Phone account for ${email}`);
     }
 
     const homeAccountId = result.account?.homeAccountId || '';
@@ -120,18 +136,20 @@ router.get('/callback', async (req, res) => {
        .catch(err => console.error(`[auth] Failed to persist MSAL cache for ${email}:`, err.message));
     }
 
-    // Create session (homeAccountId stays in DB only — no need to leak it in the JWT)
+    // Create session. JWT carries only userId — role + is_active are looked
+    // up from the DB on every request (with a 5s cache) so revocation is
+    // near-instant and role changes take effect without re-login.
     const token = jwt.sign(
-      { identity: user.identity, role: user.role, email },
+      { userId: user.id },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: `${SESSION_TTL_SECONDS}s` }
     );
 
     res.cookie('nucleus_session', token, {
       httpOnly: true,
       secure: getAppUrl().startsWith('https'),
       sameSite: 'lax',
-      maxAge: 24 * 60 * 60 * 1000,
+      maxAge: SESSION_TTL_SECONDS * 1000,
     });
 
     res.redirect('/');
@@ -166,4 +184,4 @@ router.post('/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-module.exports = Object.assign(router, { VALID_IDENTITIES, USER_MAP });
+module.exports = Object.assign(router, { isValidIdentity });

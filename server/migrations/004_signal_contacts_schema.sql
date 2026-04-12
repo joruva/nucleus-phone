@@ -83,6 +83,10 @@ CREATE TABLE IF NOT EXISTS signal_enrichment_jobs (
   credits_used INT DEFAULT 0,
   last_processed_domain TEXT,
   started_at TIMESTAMPTZ DEFAULT NOW(),
+  heartbeat_at TIMESTAMPTZ DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
   error TEXT
 );
+
+-- Backfill heartbeat_at for any existing rows (idempotent)
+UPDATE signal_enrichment_jobs SET heartbeat_at = COALESCE(started_at, NOW()) WHERE heartbeat_at IS NULL;

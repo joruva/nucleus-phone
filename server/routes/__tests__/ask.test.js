@@ -21,6 +21,7 @@ const jwt = require('jsonwebtoken');
 const { pool } = require('../../db');
 const { client: twilioClient } = require('../../lib/twilio');
 const { sendSlackDM } = require('../../lib/slack');
+const { __testSetUser } = require('../../middleware/auth');
 
 function makeApp() {
   const app = express();
@@ -30,8 +31,17 @@ function makeApp() {
   return app;
 }
 
+let nextUserId = 4000;
 function mockSession(identity, role = 'caller') {
-  jwt.verify.mockReturnValue({ identity, role, email: `${identity}@joruva.com` });
+  const id = nextUserId++;
+  __testSetUser({
+    id,
+    email: `${identity}@joruva.com`,
+    identity,
+    role,
+    displayName: identity,
+  });
+  jwt.verify.mockReturnValue({ userId: id });
 }
 
 let app;

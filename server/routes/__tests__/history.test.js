@@ -32,6 +32,7 @@ const { sendSlackAlert, formatCallAlert } = require('../../lib/slack');
 const { addNoteToContact } = require('../../lib/hubspot');
 const { syncInteraction } = require('../../lib/interaction-sync');
 const { lookupCustomer } = require('../../lib/customer-lookup');
+const { __testSetUser } = require('../../middleware/auth');
 
 const API_KEY = 'test-api-key';
 
@@ -60,8 +61,17 @@ const SAMPLE_CALL = {
   ci_products: null,
 };
 
+let nextUserId = 1000;
 function mockSession(identity, role = 'caller') {
-  jwt.verify.mockReturnValue({ identity, role, email: `${identity}@joruva.com` });
+  const id = nextUserId++;
+  __testSetUser({
+    id,
+    email: `${identity}@joruva.com`,
+    identity,
+    role,
+    displayName: identity,
+  });
+  jwt.verify.mockReturnValue({ userId: id });
 }
 
 let app;

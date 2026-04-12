@@ -1,5 +1,6 @@
 const { Router } = require('express');
 const { apiKeyAuth, sessionAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { pool } = require('../db');
 const { sendSlackAlert, formatCallAlert } = require('../lib/slack');
 const { addNoteToContact, getContact } = require('../lib/hubspot');
@@ -73,7 +74,7 @@ const HAS_SUMMARY_FRAGMENT = `(
 // GET /api/history — list past calls with FTS, filters, role-based access.
 // sessionAuth only — returns enriched AI/sentiment/competitive data via LATERAL
 // JOIN. Not safe for unscoped API key callers. Non-admins forced to own calls.
-router.get('/', sessionAuth, async (req, res) => {
+router.get('/', sessionAuth, rbac('external_caller'), async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 25, 1), 200);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
   const { q, disposition, qualification, from, to } = req.query;
@@ -150,7 +151,7 @@ router.get('/', sessionAuth, async (req, res) => {
 
 // GET /api/history/:id/timeline — cross-channel interaction history for this contact.
 // Ownership enforced via parent call 404 gate before calling lookupCustomer.
-router.get('/:id/timeline', sessionAuth, async (req, res) => {
+router.get('/:id/timeline', sessionAuth, rbac('external_caller'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
 
@@ -193,7 +194,7 @@ router.get('/:id/timeline', sessionAuth, async (req, res) => {
 
 // GET /api/history/:id — single call detail with enrichment.
 // sessionAuth only. Ownership enforced for non-admins.
-router.get('/:id', sessionAuth, async (req, res) => {
+router.get('/:id', sessionAuth, rbac('external_caller'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) return res.status(400).json({ error: 'id must be an integer' });
 
@@ -228,7 +229,7 @@ router.get('/:id', sessionAuth, async (req, res) => {
 // POST /api/history/:id/disposition — set disposition + notes + optional follow-up email.
 // Stays on apiKeyAuth so automation can save dispositions. Ownership check only when
 // sessionAuth path is active (req.user is set).
-router.post('/:id/disposition', apiKeyAuth, async (req, res) => {
+router.post('/:id/disposition', apiKeyAuth, rbac('external_caller'), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (isNaN(id)) {
     return res.status(400).json({ error: 'id must be an integer' });

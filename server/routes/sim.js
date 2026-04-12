@@ -8,6 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { sessionAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { pool } = require('../db');
 const { createOutboundCall, stopCall } = require('../lib/vapi');
 const { scoreTranscript } = require('../lib/sim-scorer');
@@ -17,6 +18,11 @@ const { processEquipmentChunk } = require('../lib/equipment-pipeline');
 const team = require('../config/team.json');
 
 const router = Router();
+
+// Practice mode is open to every logged-in caller (including external).
+// The in-route sessionAuth calls are preserved for fidelity to the old
+// per-route policy but this mount-level guard is the real gate.
+router.use(sessionAuth, rbac('external_caller'));
 
 const E164_RE = /^\+[1-9]\d{6,14}$/;
 const ID_RE = /^\d+$/;

@@ -6,8 +6,14 @@
 const express = require('express');
 const router = express.Router();
 const { apiKeyAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { pool } = require('../db');
-const { runBatchEnrichment, getJobStatus, checkApolloBudget } = require('../lib/signal-enrichment');
+const { runBatchEnrichment, getJobStatus, checkApolloBudget, claimEnrichmentSlot } = require('../lib/signal-enrichment');
+
+// Every route in this file is admin-only. Signals expose ABM pipeline
+// internals (tiers, DOD flags, contract totals) and credit-spending enrichment
+// jobs — external callers and internal callers have no business here.
+router.use(apiKeyAuth, rbac('admin'));
 
 const MC_BASE = process.env.MULTICHANNEL_API_URL || 'https://joruva-multichannel.onrender.com';
 const MC_API_KEY = process.env.MC_API_KEY || '';
@@ -90,24 +96,18 @@ router.post('/enrich-batch', apiKeyAuth, async (req, res) => {
     return res.status(500).json({ error: 'Budget check failed: ' + err.message });
   }
 
-  // Fire and forget — create job record, return ID immediately, run enrichment in background
   try {
-    let activeJobId = jobId;
-    if (!activeJobId) {
-      const jobResult = await pool.query(
-        `INSERT INTO signal_enrichment_jobs (tiers, status) VALUES ($1, 'running') RETURNING id`,
-        [tiers],
-      );
-      activeJobId = jobResult.rows[0].id;
-    }
+    const activeJobId = jobId || await claimEnrichmentSlot(tiers);
 
     res.json({ jobId: activeJobId, status: 'running', message: 'Enrichment started. Poll GET /api/signals/enrich-batch/' + activeJobId });
 
-    // Run in background — errors are caught and saved to job record by runBatchEnrichment
     runBatchEnrichment({ tiers, resumeFrom, jobId: activeJobId }).catch(err => {
       console.error('Background enrichment failed:', err.message);
     });
   } catch (err) {
+    if (err.code === 'CONCURRENT_JOB') {
+      return res.status(409).json({ error: err.message, activeJobId: err.activeJobId });
+    }
     console.error('Failed to start enrichment:', err.message);
     res.status(500).json({ error: err.message });
   }

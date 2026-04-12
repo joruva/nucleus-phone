@@ -1,12 +1,16 @@
 const { Router } = require('express');
 const { sessionAuth } = require('../middleware/auth');
+const { rbac } = require('../middleware/rbac');
 const { pool } = require('../db');
 const { runChat } = require('../lib/ask-nucleus');
 const { escalateToTom } = require('../lib/escalation');
 
 const router = Router();
 
-// All ask routes require session auth (user identity needed for access control)
+// All ask routes require session auth + at least external_caller. The
+// system prompt in ask-nucleus.js adds a stricter topic firewall when
+// role === 'external_caller' — no business strategy, financials, or IP.
+router.use(sessionAuth, rbac('external_caller'));
 
 // POST /api/ask — Send message, get SSE stream
 router.post('/', sessionAuth, async (req, res) => {
