@@ -426,6 +426,82 @@ async function initSchema() {
     }
     console.log('nucleus_phone_users table ready');
 
+    // ── phone_suffix7: indexed last-7-digit column for fast call matching ──
+    // Replaces runtime REGEXP_REPLACE + RIGHT in cockpit queries with a
+    // pre-computed column. Triggers keep it in sync on INSERT/UPDATE.
+    await client.query(`
+      ALTER TABLE nucleus_phone_calls ADD COLUMN IF NOT EXISTS phone_suffix7 VARCHAR(7);
+      ALTER TABLE v35_pb_contacts ADD COLUMN IF NOT EXISTS phone_suffix7 VARCHAR(7);
+    `);
+
+    // Trigger function: extract last 7 digits from a phone column
+    await client.query(`
+      CREATE OR REPLACE FUNCTION compute_phone_suffix7()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        digits TEXT;
+      BEGIN
+        digits := REGEXP_REPLACE(COALESCE(NEW.lead_phone, ''), '\\D', '', 'g');
+        IF LENGTH(digits) >= 7 THEN
+          NEW.phone_suffix7 := RIGHT(digits, 7);
+        ELSE
+          NEW.phone_suffix7 := NULL;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+
+      CREATE OR REPLACE FUNCTION compute_pb_phone_suffix7()
+      RETURNS TRIGGER AS $$
+      DECLARE
+        digits TEXT;
+      BEGIN
+        digits := REGEXP_REPLACE(COALESCE(NEW.phone, ''), '\\D', '', 'g');
+        IF LENGTH(digits) >= 7 THEN
+          NEW.phone_suffix7 := RIGHT(digits, 7);
+        ELSE
+          NEW.phone_suffix7 := NULL;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    // Attach triggers (idempotent via DROP IF EXISTS)
+    await client.query(`
+      DROP TRIGGER IF EXISTS trg_npc_phone_suffix7 ON nucleus_phone_calls;
+      CREATE TRIGGER trg_npc_phone_suffix7
+        BEFORE INSERT OR UPDATE OF lead_phone ON nucleus_phone_calls
+        FOR EACH ROW EXECUTE FUNCTION compute_phone_suffix7();
+
+      DROP TRIGGER IF EXISTS trg_pbc_phone_suffix7 ON v35_pb_contacts;
+      CREATE TRIGGER trg_pbc_phone_suffix7
+        BEFORE INSERT OR UPDATE OF phone ON v35_pb_contacts
+        FOR EACH ROW EXECUTE FUNCTION compute_pb_phone_suffix7();
+    `);
+
+    // Backfill existing rows that have a phone but no suffix yet
+    await client.query(`
+      UPDATE nucleus_phone_calls
+      SET phone_suffix7 = RIGHT(REGEXP_REPLACE(lead_phone, '\\D', '', 'g'), 7)
+      WHERE lead_phone IS NOT NULL
+        AND phone_suffix7 IS NULL
+        AND LENGTH(REGEXP_REPLACE(lead_phone, '\\D', '', 'g')) >= 7;
+
+      UPDATE v35_pb_contacts
+      SET phone_suffix7 = RIGHT(REGEXP_REPLACE(phone, '\\D', '', 'g'), 7)
+      WHERE phone IS NOT NULL
+        AND phone_suffix7 IS NULL
+        AND LENGTH(REGEXP_REPLACE(phone, '\\D', '', 'g')) >= 7;
+    `);
+
+    // Indexes for the new column
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_npc_phone_suffix7 ON nucleus_phone_calls(phone_suffix7) WHERE phone_suffix7 IS NOT NULL;
+      CREATE INDEX IF NOT EXISTS idx_pbc_phone_suffix7 ON v35_pb_contacts(phone_suffix7) WHERE phone_suffix7 IS NOT NULL;
+    `);
+    console.log('phone_suffix7 columns + triggers + indexes ready');
+
   } finally {
     client.release();
   }

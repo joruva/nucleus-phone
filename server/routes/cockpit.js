@@ -34,7 +34,7 @@ router.get('/next-uncalled', apiKeyAuth, rbac('external_caller'), async (req, re
       const digits = exclude.replace(/\D/g, '').slice(-7);
       if (digits.length === 7) {
         params.push(digits);
-        excludeClause = `AND RIGHT(REGEXP_REPLACE(pb.phone, '\\D', '', 'g'), 7) != $${params.length}`;
+        excludeClause = `AND pb.phone_suffix7 != $${params.length}`;
       }
     }
 
@@ -44,14 +44,14 @@ router.get('/next-uncalled', apiKeyAuth, rbac('external_caller'), async (req, re
        FROM v35_pb_contacts pb
        JOIN v35_signal_metadata sm ON sm.domain = pb.domain
        JOIN v35_lead_reservoir lr ON lr.domain = pb.domain
-       WHERE pb.phone IS NOT NULL
+       WHERE pb.phone_suffix7 IS NOT NULL
          AND pb.phone_type IN ('mobile', 'direct')
          AND pb.domain IS NOT NULL
          ${excludeClause}
          AND NOT EXISTS (
            SELECT 1 FROM nucleus_phone_calls npc
            WHERE npc.status = 'completed'
-             AND npc.lead_phone LIKE '%' || RIGHT(REGEXP_REPLACE(pb.phone, '\\D', '', 'g'), 7)
+             AND npc.phone_suffix7 = pb.phone_suffix7
          )
        ORDER BY sm.signal_score DESC NULLS LAST
        LIMIT 1`,
@@ -101,13 +101,16 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
       // 0: Cross-channel interaction history
       lookupCustomer({ phone, email, contactId }).catch(() => null),
 
-      // 1: Prior nucleus-phone calls (match by phone OR email)
+      // 1: Prior nucleus-phone calls (match by phone_suffix7 OR email)
       (() => {
         const clauses = [];
         const params = [];
         if (phone) {
-          params.push(`%${phone.slice(-7)}`);
-          clauses.push(`lead_phone LIKE $${params.length}`);
+          const suffix = phone.replace(/\D/g, '').slice(-7);
+          if (suffix.length === 7) {
+            params.push(suffix);
+            clauses.push(`phone_suffix7 = $${params.length}`);
+          }
         }
         if (email) {
           params.push(email);

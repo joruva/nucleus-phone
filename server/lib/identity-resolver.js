@@ -384,7 +384,7 @@ async function lookupPbContactByPhone(rawPhone, normalizedPhone) {
     SELECT full_name, first_name, last_name, title, company_name, phone,
            linkedin_profile_url
     FROM v35_pb_contacts
-    WHERE phone IS NOT NULL AND phone LIKE '%' || $1
+    WHERE phone_suffix7 = $1
     LIMIT 1
   `, [digits.slice(-7)]);
 
