@@ -21,13 +21,33 @@ const NON_STREAM_TIMEOUT = 30000;
 
 // ── Static knowledge (loaded once at require time) ──────────────
 
-const PRODUCT_CATALOG = `Joruva Industrial products (confirmed pricing):
-Compressors: JRS-7.5E 7.5HP 28CFM $7,495 | JRS-10E 10HP 38CFM $9,495 | JRS-30 30HP 125CFM $19,500 (direct)
+// Build the compressor line dynamically from COMPRESSOR_CATALOG so confirmed
+// pricing additions (e.g. PM VSD quotes from CAS) flow through without
+// requiring a prompt edit. Confirmed rows show a dollar value; everything
+// else shows "quote" and is meant to be looked up via get_product_specs.
+function buildCompressorLineText() {
+  const byLine = { rs_open: [], pm_vsd: [], large_frame: [] };
+  for (const c of COMPRESSOR_CATALOG) {
+    if (!byLine[c.productLine]) continue;
+    const priceTxt = c.pricingStatus === 'confirmed' && c.price
+      ? `$${c.price.toLocaleString()}`
+      : 'quote';
+    byLine[c.productLine].push(`${c.model} ${c.hp}HP ${c.cfm}CFM ${priceTxt}`);
+  }
+  const lines = [];
+  if (byLine.rs_open.length) lines.push(`RS Open Frame (fixed-speed, 5-100HP): ${byLine.rs_open.join(' | ')}`);
+  if (byLine.pm_vsd.length) lines.push(`Permanent Magnet VSD (enclosed, variable-speed, 10-200HP): ${byLine.pm_vsd.join(' | ')}`);
+  if (byLine.large_frame.length) lines.push(`Large Frame Enclosed (125-476HP): ${byLine.large_frame.join(' | ')}`);
+  return lines.join('\n');
+}
+
+const PRODUCT_CATALOG = `Joruva Industrial products:
+${buildCompressorLineText()}
 Dryers (refrigerated): JRD-30 $2,195 | JRD-40 $2,495 | JRD-60 $2,895 | JRD-80 $3,195 | JRD-100 $3,595
 Dryers (desiccant, -60°F, molecular sieve, wall-mount): JDD-40 40CFM $7,495 | JDD-80 80CFM $11,895
 Filters: JPF-70 particulate 1µm $399 | JPF-130 $499 | JCF-70 coalescing 0.01µm $349 | JCF-130 $449
 OWS (oil-water separator): OWS75 $234 | OWS150 $1,092
-Larger systems (30HP+): direct sale, custom quote required.
+Rows marked "quote" are direct-sale — use the get_product_specs tool to confirm current specs, then tell the rep to request a quote (or escalate to Tom).
 For AS9100/aerospace: recommend desiccant dryer + coalescing filter. General mfg: refrigerated dryer.`;
 
 // Full catalog as structured text for the get_product_specs tool
