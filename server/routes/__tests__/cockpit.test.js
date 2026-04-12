@@ -239,6 +239,43 @@ describe('GET /api/cockpit/:identifier', () => {
     expect(clearCache).not.toHaveBeenCalled();
   });
 
+  test('email-only contact returns priorCalls matched by lead_email', async () => {
+    // Contact has email but no phone — prior calls should still appear
+    resolve.mockResolvedValue({
+      ...MOCK_IDENTITY,
+      phone: null,
+    });
+
+    pool.query
+      // Prior calls — matched by lead_email
+      .mockResolvedValueOnce({
+        rows: [{
+          id: 99, caller_identity: 'tom', disposition: 'voicemail',
+          notes: 'Left VM about compressor quote',
+          ai_summary: 'Called, left voicemail',
+          ai_action_items: ['Retry Thursday'],
+        }],
+        rowCount: 1,
+      })
+      // Remaining queries — empty
+      .mockResolvedValue({ rows: [], rowCount: 0 });
+
+    const res = await request(app)
+      .get('/api/cockpit/jane@acme.com')
+      .set('x-api-key', API_KEY)
+      .expect(200);
+
+    expect(res.body.priorCalls).toHaveLength(1);
+    expect(res.body.priorCalls[0]).toMatchObject({
+      id: 99, disposition: 'voicemail',
+    });
+
+    // Verify the SQL used lead_email (not lead_phone)
+    const priorCallsQuery = pool.query.mock.calls[0];
+    expect(priorCallsQuery[0]).toContain('lead_email');
+    expect(priorCallsQuery[1]).toContain('jane@acme.com');
+  });
+
   test('skips optional queries when identity has no email/company', async () => {
     resolve.mockResolvedValue({
       ...MOCK_IDENTITY,

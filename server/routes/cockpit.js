@@ -55,18 +55,29 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
       // 0: Cross-channel interaction history
       lookupCustomer({ phone, email, contactId }).catch(() => null),
 
-      // 1: Prior nucleus-phone calls
-      phone
-        ? pool.query(
-            `SELECT id, created_at, caller_identity, disposition, qualification,
-                    notes, duration_seconds, products_discussed,
-                    ai_summary, ai_action_items
-             FROM nucleus_phone_calls
-             WHERE lead_phone LIKE $1 AND status = 'completed'
-             ORDER BY created_at DESC LIMIT 20`,
-            [`%${phone.slice(-7)}`]
-          ).then(r => r.rows).catch(() => [])
-        : Promise.resolve([]),
+      // 1: Prior nucleus-phone calls (match by phone OR email)
+      (() => {
+        const clauses = [];
+        const params = [];
+        if (phone) {
+          params.push(`%${phone.slice(-7)}`);
+          clauses.push(`lead_phone LIKE $${params.length}`);
+        }
+        if (email) {
+          params.push(email);
+          clauses.push(`LOWER(lead_email) = LOWER($${params.length})`);
+        }
+        if (!clauses.length) return Promise.resolve([]);
+        return pool.query(
+          `SELECT id, created_at, caller_identity, disposition, qualification,
+                  notes, duration_seconds, products_discussed,
+                  ai_summary, ai_action_items
+           FROM nucleus_phone_calls
+           WHERE (${clauses.join(' OR ')}) AND status = 'completed'
+           ORDER BY created_at DESC LIMIT 20`,
+          params
+        ).then(r => r.rows).catch(() => []);
+      })(),
 
       // 2: Discovery pipeline data (case-insensitive exact match)
       identity.company
