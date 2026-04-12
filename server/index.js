@@ -29,7 +29,12 @@ app.use(cors({
     : true,
   credentials: true,
 }));
-app.use(express.json());
+app.use(express.json({
+  verify: (req, _res, buf) => {
+    // Capture raw body for HMAC verification on hub webhook route
+    if (req.url === '/api/hub/events') req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
@@ -73,7 +78,7 @@ app.use('/api/admin', apiKeyAuth, rbac('admin'), require('./routes/admin'));
 
 // Hub event webhook — HMAC-authenticated, triggers catalog refresh on product.* events.
 // Uses raw body capture to avoid JSON re-serialization HMAC divergence.
-app.post('/api/hub/events', express.json({ verify: (req, _res, buf) => { req.rawBody = buf; } }), (req, res) => {
+app.post('/api/hub/events', (req, res) => {
   const signature = req.headers['x-hub-signature'];
   const secret = process.env.HUB_SPOKE_SECRET;
   if (!signature || !secret || !req.rawBody) return res.status(401).json({ error: 'Not authorized' });
