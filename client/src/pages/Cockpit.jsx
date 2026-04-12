@@ -280,10 +280,10 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId, o
                 {/* Contact identity + signal context — ship status bar */}
                 <div className="px-5 pt-3 pb-1">
                   <ContactIdentity identity={d.identity} />
-                  <SignalBadges
-                    signalMetadata={d.signalMetadata}
-                    domain={d.icpScore?.domain}
-                  />
+                  <div className="flex items-center justify-between">
+                    <SignalBadges signalMetadata={d.signalMetadata} domain={d.icpScore?.domain} />
+                    <DataSourceIndicator sources={dataSources(d)} />
+                  </div>
                   <LastCallCard priorCalls={d.priorCalls} />
                 </div>
 
