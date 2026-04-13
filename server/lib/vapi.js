@@ -64,6 +64,9 @@ async function stopCall(vapiCallId) {
  * Fetch a completed call from the Vapi API (includes transcript + recording).
  */
 async function getCall(vapiCallId) {
+  if (!vapiCallId || typeof vapiCallId !== 'string') {
+    throw new Error('getCall requires a valid call ID string');
+  }
   return vapiRequest('GET', `call/${encodeURIComponent(vapiCallId)}`);
 }
 

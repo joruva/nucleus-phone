@@ -518,8 +518,6 @@ router.post('/webhook', async (req, res) => {
   const { message } = req.body || {};
   if (!message) return res.sendStatus(200);
 
-  console.log(`sim webhook: type=${message.type} call=${message.call?.id || 'none'}`);
-
   // ── Handle real-time transcript events (practice call live analysis) ──
   if (message.type === 'transcript') {
     res.sendStatus(200);
@@ -542,12 +540,14 @@ router.post('/webhook', async (req, res) => {
   const duration = typeof call?.duration === 'number' ? Math.round(call.duration) : null;
   const costCents = typeof call?.cost === 'number' ? Math.round(call.cost * 100) : null;
 
+  // Respond immediately — Vapi will retry if we take too long
+  res.sendStatus(200);
+
   console.log(`sim webhook: end-of-call for ${vapiCallId} — transcript=${transcript ? 'yes' : 'MISSING'} recording=${recording ? 'yes' : 'MISSING'}`);
 
   // Vapi sometimes fires the end-of-call webhook before transcript is ready.
   // If transcript is missing, wait 5s and fetch directly from the Vapi API.
   if (!transcript) {
-    console.log(`sim webhook: transcript missing, fetching from Vapi API in 5s...`);
     await new Promise(r => setTimeout(r, 5000));
     try {
       const vapiCall = await getCall(vapiCallId);
@@ -577,7 +577,7 @@ router.post('/webhook', async (req, res) => {
       ));
     } catch (err) {
       console.error(`sim webhook: UPDATE failed for ${vapiCallId}:`, err.message);
-      return res.sendStatus(500);
+      return;
     }
     if (rows.length) break;
     if (attempt === 0) {
@@ -585,16 +585,12 @@ router.post('/webhook', async (req, res) => {
     }
   }
 
-  // 200 — Vapi doesn't need to wait for scoring (500 returned above on DB failure)
-  res.sendStatus(200);
-
   if (!rows.length) {
     console.warn(`sim webhook: no row for vapi_call_id ${vapiCallId} after retry`);
     return;
   }
 
   // Async scoring pipeline (fire-and-forget after 200 response).
-  // Wrapped with .catch() to prevent unhandled promise rejections.
   const row = rows[0];
   (async () => {
     if (!transcript) {

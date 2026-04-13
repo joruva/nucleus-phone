@@ -17,21 +17,20 @@ const POLL_CALL_MS = 5000;
 const POLL_SCORE_MS = 3000;
 const SCORE_TIMEOUT_MS = 60000;
 
-// Synthesize a phone ringtone using Web Audio API — two-tone ring, 2s on / 4s off
+// Synthesize a phone ringtone using Web Audio API — 0.8s burst / 0.4s gap
 function playRingtone(durationMs) {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const gain = ctx.createGain();
   gain.gain.value = 0.15;
   gain.connect(ctx.destination);
 
-  const ringOn = 0.8;   // ring burst duration (seconds)
-  const ringOff = 0.4;  // gap between bursts
+  const ringOn = 0.8;
+  const ringOff = 0.4;
   const cycle = ringOn + ringOff;
   const cycles = Math.ceil(durationMs / 1000 / cycle);
 
   for (let i = 0; i < cycles; i++) {
     const start = i * cycle;
-    // Two-tone: 440Hz + 480Hz mimics US ringtone
     [440, 480].forEach(freq => {
       const osc = ctx.createOscillator();
       osc.type = 'sine';
@@ -42,9 +41,15 @@ function playRingtone(durationMs) {
     });
   }
 
-  const stopTime = ctx.currentTime + (durationMs / 1000) + 0.1;
-  setTimeout(() => ctx.close(), durationMs + 200);
-  return { stop: () => { gain.gain.value = 0; ctx.close(); } };
+  let closed = false;
+  return {
+    stop: () => {
+      if (closed) return;
+      closed = true;
+      gain.gain.value = 0;
+      ctx.close().catch(() => {});
+    },
+  };
 }
 
 export default function PracticeCallButton({ identity, onScoreComplete, onDifficultySelect, onCallStart, onCallEnd }) {
@@ -167,6 +172,7 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
   }
 
   function handleConfirm() {
+    if (phase !== 'confirming') return; // double-click guard
     setPhase('ringing');
     setErrorMsg('');
     setResult(null);
@@ -211,9 +217,9 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
   }
 
   async function handleCancel() {
-    const wasActive = phase === 'in-progress' || phase === 'ringing' || phase === 'connecting';
+    const hadActiveCall = phase === 'in-progress' || phase === 'connecting';
     cleanup();
-    if (wasActive) onCallEndRef.current?.();
+    if (hadActiveCall) onCallEndRef.current?.();
     if (simCallId) {
       try { await cancelPracticeCall(simCallId); } catch (err) { console.debug('sim cancel (best-effort):', err.message); }
     }
