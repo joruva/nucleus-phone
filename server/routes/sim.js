@@ -19,6 +19,12 @@ const team = require('../config/team.json');
 
 const router = Router();
 
+// ─── Vapi webhook — registered BEFORE auth middleware ────────────────────────
+// Vapi sends server events (transcript, end-of-call-report) with no session
+// cookie. Auth is handled via x-vapi-secret header inside the handler.
+// This MUST be above router.use(sessionAuth) or it gets 401'd.
+router.post('/webhook', webhookHandler);
+
 // Practice mode is open to every logged-in caller (including external).
 // The in-route sessionAuth calls are preserved for fidelity to the old
 // per-route policy but this mount-level guard is the real gate.
@@ -506,9 +512,8 @@ async function handleTranscriptEvent(message) {
   await processEquipmentChunk(wsCallId, 'practice', String(simId), text);
 }
 
-// ─── POST /webhook — Vapi server events (transcript + end-of-call-report) ───
-// No auth middleware — validates x-vapi-secret header manually.
-router.post('/webhook', async (req, res) => {
+// ─── Vapi webhook handler (registered above auth middleware) ─────────────────
+async function webhookHandler(req, res) {
   // Hard-require webhook secret
   const secret = process.env.VAPI_WEBHOOK_SECRET;
   if (!secret || req.headers['x-vapi-secret'] !== secret) {
@@ -636,6 +641,6 @@ router.post('/webhook', async (req, res) => {
     pool.query("UPDATE sim_call_scores SET status = 'score-failed' WHERE id = $1", [row.id])
       .catch(dbErr => console.error(`sim: failed to mark score-failed for ${row.id}:`, dbErr.message));
   });
-});
+}
 
 module.exports = router;
