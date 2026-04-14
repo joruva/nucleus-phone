@@ -383,11 +383,11 @@ router.get('/scoreboard', sessionAuth, async (req, res) => {
   res.json({ leaderboard, period: '30d' });
 });
 
-// ─── POST /call/:id/cancel — Cancel in-progress call ──────────────
+// ─── POST /call/:id/cancel — End call early and score what we have ──
 router.post('/call/:id/cancel', sessionAuth, async (req, res) => {
   if (!validateId(req, res)) return;
   const { rows } = await pool.query(
-    "SELECT id, vapi_call_id, status, caller_identity FROM sim_call_scores WHERE id = $1",
+    "SELECT id, vapi_call_id, status, caller_identity, difficulty FROM sim_call_scores WHERE id = $1",
     [req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
@@ -398,17 +398,66 @@ router.post('/call/:id/cancel', sessionAuth, async (req, res) => {
     return res.status(409).json({ error: `Cannot cancel — status is ${rows[0].status}` });
   }
 
-  if (rows[0].vapi_call_id) {
-    try { await stopCall(rows[0].vapi_call_id); } catch (err) {
+  const row = rows[0];
+
+  if (row.vapi_call_id) {
+    try { await stopCall(row.vapi_call_id); } catch (err) {
       console.warn('Vapi stop failed (may have already ended):', err.message);
     }
   }
 
+  // Fetch transcript from Vapi API — the call just ended so transcript
+  // may need a moment to finalize. Try immediately, then retry after 3s.
+  let transcript = null;
+  let recording = null;
+  if (row.vapi_call_id) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise(r => setTimeout(r, 3000));
+      try {
+        const vapiCall = await getCall(row.vapi_call_id);
+        transcript = vapiCall.artifact?.transcript || vapiCall.transcript || null;
+        recording = vapiCall.artifact?.recordingUrl || vapiCall.recordingUrl || null;
+        if (transcript) break;
+      } catch (err) {
+        console.warn(`sim cancel: Vapi fetch attempt ${attempt + 1} failed:`, err.message);
+      }
+    }
+  }
+
+  if (!transcript) {
+    // No transcript available — mark as cancelled (call was too short)
+    await pool.query("UPDATE sim_call_scores SET status = 'cancelled' WHERE id = $1", [row.id]);
+    res.json({ cancelled: true });
+    return;
+  }
+
+  // Transcript available — transition to scoring
   await pool.query(
-    "UPDATE sim_call_scores SET status = 'cancelled' WHERE id = $1",
-    [req.params.id]
+    `UPDATE sim_call_scores SET transcript = $2, recording_url = $3, status = 'scoring' WHERE id = $1`,
+    [row.id, transcript, recording]
   );
-  res.json({ cancelled: true });
+  res.json({ cancelled: false, scoring: true });
+
+  // Fire-and-forget scoring pipeline
+  (async () => {
+    const result = await scoreTranscript(transcript, row.difficulty, row.caller_identity);
+    if (result.error) {
+      console.error(`sim cancel scoring failed for ${row.vapi_call_id}:`, result.message);
+      await pool.query("UPDATE sim_call_scores SET status = 'score-failed' WHERE id = $1", [row.id]);
+      return;
+    }
+    await persistScores(row.id, result);
+    const { rows: [scored] } = await pool.query('SELECT * FROM sim_call_scores WHERE id = $1', [row.id]);
+    const slackMsg = formatSimScorecard(scored);
+    const sent = await sendSlackAlert(slackMsg);
+    if (sent) await pool.query("UPDATE sim_call_scores SET slack_notified = true WHERE id = $1", [row.id]);
+    if (scored.admin_report) {
+      sendAdminReport(formatAdminReport(scored)).catch(() => {});
+    }
+  })().catch(err => {
+    console.error(`sim cancel scoring pipeline error for ${row.id}:`, err.message);
+    pool.query("UPDATE sim_call_scores SET status = 'score-failed' WHERE id = $1", [row.id]).catch(() => {});
+  });
 });
 
 // ─── POST /call/:id/rescore — Re-score a failed row (admin only) ──

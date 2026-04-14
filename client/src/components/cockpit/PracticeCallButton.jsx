@@ -221,7 +221,16 @@ export default function PracticeCallButton({ identity, onScoreComplete, onDiffic
     cleanup();
     if (hadActiveCall) onCallEndRef.current?.();
     if (simCallId) {
-      try { await cancelPracticeCall(simCallId); } catch (err) { console.debug('sim cancel (best-effort):', err.message); }
+      try {
+        const result = await cancelPracticeCall(simCallId);
+        if (result.scoring) {
+          // Server has a transcript and is scoring — show scoring UI
+          setPhase('scoring');
+          startTimeRef.current = Date.now();
+          startPolling(simCallId, 'scoring');
+          return;
+        }
+      } catch (err) { console.debug('sim cancel (best-effort):', err.message); }
     }
     setPhase('idle');
   }
