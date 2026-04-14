@@ -4,5 +4,7 @@ client/dist/
 .env
 *.log
 .DS_Store
+# Office lockfiles (Word/Excel)
+~$*
 server/config/team-phones.json
 .env.phase0

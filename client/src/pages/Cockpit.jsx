@@ -15,7 +15,7 @@ import LastCallCard from '../components/cockpit/LastCallCard';
 import QualScript from '../components/cockpit/QualScript';
 import CompanyIntel from '../components/cockpit/CompanyIntel';
 import ProductReference from '../components/cockpit/ProductReference';
-import LiveAnalysis from '../components/cockpit/LiveAnalysis';
+import ReactorContainer from '../components/cockpit/ReactorContainer';
 import CallControls from '../components/cockpit/CallControls';
 import PracticeCallButton from '../components/cockpit/PracticeCallButton';
 import PracticeHistory from '../components/cockpit/PracticeHistory';
@@ -25,6 +25,7 @@ import CareerContext from '../components/cockpit/CareerContext';
 import CompanyVernacular from '../components/cockpit/CompanyVernacular';
 import DataSourceIndicator from '../components/ui/DataSourceIndicator';
 import useLiveAnalysis from '../hooks/useLiveAnalysis';
+import useNavigatorMode from '../hooks/useNavigatorMode';
 import TestScenarioButton from '../components/cockpit/TestScenarioButton';
 import DebugOverlay from '../components/cockpit/DebugOverlay';
 import { getNextUncalled } from '../lib/api';
@@ -92,7 +93,7 @@ function isTestCompany(d) {
   return company.includes('joruva');
 }
 
-function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId, testCallId, onTestCallId, confParam }) {
+function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId, testCallId, onTestCallId, confParam, navigatorEnabled }) {
   return (
     <>
       {/* Contact identity + signal context — ship status bar */}
@@ -124,7 +125,7 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId, testCallId, on
         {/* CENTER — Viewscreen fills height, Company Intel anchored to bottom */}
         <div className="min-w-0 flex flex-col">
           <div className="cockpit-viewscreen">
-            <LiveAnalysis data={liveAnalysis} active={callPhase === 'active' || !!testCallId || !!confParam} contact={d.identity} callId={liveCallId} isPractice={false} />
+            <ReactorContainer data={liveAnalysis} active={callPhase === 'active' || !!testCallId || !!confParam} contact={d.identity} callId={liveCallId} isPractice={false} navigatorEnabled={navigatorEnabled} />
           </div>
           {isTestCompany(d) && (
             <div className="flex items-center gap-2 mt-1">
@@ -195,6 +196,7 @@ export default function Cockpit({ identity, role, callState, twilioStatus, force
       ? (activeSimCallId ? `sim-${activeSimCallId}` : null)
       : confParam || callState.callData?.conferenceName || null);
   const liveAnalysis = useLiveAnalysis(liveCallId, !!testCallId || callPhase === 'active' || !!activeSimCallId || !!confParam);
+  const navigatorMode = useNavigatorMode(liveCallId);
 
   // Clear conf search param when observed conference ends (WebSocket disconnects after being connected)
   const wasConnected = useRef(false);
@@ -287,6 +289,8 @@ export default function Cockpit({ identity, role, callState, twilioStatus, force
         currentUser={identity}
         isPractice={isPractice}
         practiceStats={myPracticeStats}
+        navigatorEnabled={navigatorMode.navigatorEnabled}
+        onNavigatorToggle={navigatorMode.toggleNavigator}
       />
 
       {loading ? (
@@ -331,7 +335,7 @@ export default function Cockpit({ identity, role, callState, twilioStatus, force
                 {/* CENTER — Viewscreen */}
                 <div className="min-w-0 flex flex-col">
                   <div className="cockpit-viewscreen">
-                    <LiveAnalysis data={liveAnalysis} active={!!activeSimCallId} contact={d.identity} callId={liveCallId} />
+                    <ReactorContainer data={liveAnalysis} active={!!activeSimCallId} contact={d.identity} callId={liveCallId} isPractice={true} navigatorEnabled={navigatorMode.navigatorEnabled} />
                   </div>
                 </div>
 
@@ -359,6 +363,7 @@ export default function Cockpit({ identity, role, callState, twilioStatus, force
               testCallId={testCallId}
               onTestCallId={setTestCallId}
               confParam={confParam}
+              navigatorEnabled={navigatorMode.navigatorEnabled}
             />
           )}
         </div>

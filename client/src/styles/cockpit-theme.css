@@ -82,6 +82,15 @@
   --cockpit-purple-border: rgba(100,72,200,0.1);
 
   --cockpit-scroll-thumb: rgba(30,30,60,0.08);
+
+  /* ── Conversation Navigator ── */
+  --cockpit-nav-positive: #28A850;
+  --cockpit-nav-neutral: #B07A0C;
+  --cockpit-nav-negative: #C05E10;
+  --cockpit-nav-guarded: #6B4EC8;
+  --cockpit-nav-hostile: #8B1A1A;
+  --cockpit-nav-suggest-bg: var(--cockpit-blue-50);
+  --cockpit-nav-suggest-accent: var(--cockpit-blue-500);
 }
 
 /* ── Dark mode — deep slate with violet undertone, never pure black ── */
@@ -154,6 +163,15 @@
   --cockpit-purple-border: rgba(144,128,216,0.12);
 
   --cockpit-scroll-thumb: rgba(144,128,216,0.1);
+
+  /* ── Conversation Navigator (dark) ── */
+  --cockpit-nav-positive: #3FBC68;
+  --cockpit-nav-neutral: #D4981C;
+  --cockpit-nav-negative: #D87018;
+  --cockpit-nav-guarded: #A090E0;
+  --cockpit-nav-hostile: #C04848;
+  --cockpit-nav-suggest-bg: var(--cockpit-blue-50);
+  --cockpit-nav-suggest-accent: var(--cockpit-blue-500);
 }
 
 /* ── Animations — reduced intensity for long sessions ── */

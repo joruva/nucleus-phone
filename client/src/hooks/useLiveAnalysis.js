@@ -1,13 +1,22 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { SENTIMENT_HISTORY_MAX } from '../components/cockpit/navigator-constants';
 
 const MAX_RETRIES = 5;
 const RETRY_BASE_MS = 3000;
 
 export default function useLiveAnalysis(callId, enabled = true) {
+  // Equipment detection (existing)
   const [equipment, setEquipment] = useState([]);
   const [sizing, setSizing] = useState(null);
   const [recommendation, setRecommendation] = useState(null);
   const [connected, setConnected] = useState(false);
+
+  // Conversation Navigator state
+  const [phase, setPhase] = useState(null);                 // { phase, key_topic }
+  const [sentiment, setSentiment] = useState(null);         // { customer, momentum, history[] }
+  const [suggestion, setSuggestion] = useState(null);       // { text, trigger, confidence, source }
+  const [objection, setObjection] = useState(null);         // { objection, rebuttal }
+  const [navigatorStatus, setNavigatorStatus] = useState('ok');
 
   const wsRef = useRef(null);
   const retriesRef = useRef(0);
@@ -17,11 +26,23 @@ export default function useLiveAnalysis(callId, enabled = true) {
 
   const seenRef = useRef(new Set());
 
+  // Navigator refs — mutated by WS messages without triggering re-renders.
+  // The `transcript_chunk` handler reads `.current` to do Tier 0 matching.
+  const predictionRef = useRef(null);    // { pattern, suggestion }
+  // NOTE: phase_bank_loaded / Tier 1 phrase matching lives in a separate bead
+  // (nucleus-phone-cas). This hook does not store or consume phase banks yet.
+
   const reset = useCallback(() => {
     setEquipment([]);
     setSizing(null);
     setRecommendation(null);
+    setPhase(null);
+    setSentiment(null);
+    setSuggestion(null);
+    setObjection(null);
+    setNavigatorStatus('ok');
     seenRef.current.clear();
+    predictionRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -66,19 +87,77 @@ export default function useLiveAnalysis(callId, enabled = true) {
           return;
         }
 
-        if (msg.type === 'equipment_detected' && msg.data) {
-          // Dedup by manufacturer:model. If the server sends the same equipment
-          // with a different count, it's dropped — the server already deduplicates
-          // and only sends each manufacturer:model once per call.
-          const key = `${msg.data.manufacturer}:${msg.data.model}`;
-          if (!seenRef.current.has(key)) {
-            seenRef.current.add(key);
-            setEquipment(prev => [...prev, msg.data]);
+        switch (msg.type) {
+          case 'equipment_detected': {
+            if (!msg.data) return;
+            // Dedup by manufacturer:model. Server already deduplicates — this
+            // is a client-side safety net.
+            const key = `${msg.data.manufacturer}:${msg.data.model}`;
+            if (!seenRef.current.has(key)) {
+              seenRef.current.add(key);
+              setEquipment(prev => [...prev, msg.data]);
+            }
+            return;
           }
-        } else if (msg.type === 'sizing_updated' && msg.data) {
-          setSizing(msg.data);
-        } else if (msg.type === 'recommendation_ready' && msg.data) {
-          setRecommendation(msg.data);
+          case 'sizing_updated':
+            if (msg.data) setSizing(msg.data);
+            return;
+          case 'recommendation_ready':
+            if (msg.data) setRecommendation(msg.data);
+            return;
+
+          // ── Conversation Navigator messages ────────────────────────────
+          case 'conversation_phase':
+            if (msg.data) setPhase(msg.data);
+            return;
+          case 'sentiment_update': {
+            if (!msg.data) return;
+            // Server owns history. Always trust `msg.data.history[]`; if it's
+            // missing, render with an empty history rather than synthesizing
+            // one locally. Mixing server-provided and client-appended entries
+            // creates duplicates when the server later re-sends the window.
+            const history = Array.isArray(msg.data.history)
+              ? msg.data.history.slice(-SENTIMENT_HISTORY_MAX)
+              : [];
+            setSentiment({ ...msg.data, history });
+            return;
+          }
+          case 'response_suggestion':
+            if (msg.data) setSuggestion({ ...msg.data, _receivedAt: Date.now() });
+            return;
+          case 'objection_detected':
+            if (msg.data) setObjection(msg.data);
+            return;
+          case 'prediction_loaded':
+            // Replace entirely (null allowed) — prevents stale cross-cycle matches
+            predictionRef.current = msg.data || null;
+            return;
+          case 'navigator_status':
+            if (msg.data?.status) setNavigatorStatus(msg.data.status);
+            return;
+
+          // ── Tier 0: client-side prediction matching ────────────────────
+          case 'transcript_chunk': {
+            const text = msg.data?.text;
+            const pred = predictionRef.current;
+            // Guard against empty/whitespace patterns: `"".includes("")` is
+            // true and would fire on every chunk.
+            const pattern = pred?.pattern?.trim();
+            if (text && pattern && pred?.suggestion) {
+              if (text.toLowerCase().includes(pattern.toLowerCase())) {
+                setSuggestion({
+                  ...pred.suggestion,
+                  source: 'prediction',
+                  _receivedAt: Date.now(),
+                });
+                predictionRef.current = null; // consume — don't re-match
+              }
+            }
+            return;
+          }
+
+          default:
+            return;
         }
       };
 
@@ -86,9 +165,9 @@ export default function useLiveAnalysis(callId, enabled = true) {
         setConnected(false);
         wsRef.current = null;
 
-        // Intentional close (code 1000) skips retry. This is load-bearing:
-        // when callId changes, the effect cleanup closes with 1000 before the
-        // retry timer fires, preventing a stale reconnect to the old callId.
+        // Intentional close (code 1000) skips retry. Load-bearing: callId
+        // changes close with 1000 before the retry timer fires, preventing
+        // reconnect to the old callId.
         if (event.code === 1000 || retriesRef.current >= MAX_RETRIES) return;
 
         retriesRef.current++;
@@ -97,8 +176,8 @@ export default function useLiveAnalysis(callId, enabled = true) {
       };
 
       ws.onerror = () => {
+        // onclose fires after onerror — reconnect logic lives there.
         console.debug('live-analysis: WebSocket error');
-        // onclose fires after onerror — reconnect logic lives there
       };
     }
 
@@ -114,5 +193,15 @@ export default function useLiveAnalysis(callId, enabled = true) {
     };
   }, [callId, enabled, reset]);
 
-  return { equipment, sizing, recommendation, connected };
+  // Callback so the SuggestionCard can dismiss without going through setState
+  // plumbing — also used for auto-dismiss cleanup
+  const dismissSuggestion = useCallback(() => setSuggestion(null), []);
+
+  return {
+    // Equipment (existing)
+    equipment, sizing, recommendation, connected,
+    // Navigator
+    phase, sentiment, suggestion, objection, navigatorStatus,
+    dismissSuggestion,
+  };
 }

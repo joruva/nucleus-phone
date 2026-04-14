@@ -10,6 +10,7 @@ const STATUS_BADGE = {
 export default function CockpitHeader({
   callPhase, timer, onThemeToggle, theme, onBack, onRefresh, refreshing,
   leaderboard, currentUser, isPractice, practiceStats,
+  navigatorEnabled = true, onNavigatorToggle,
 }) {
   const badge = isPractice
     ? { bg: 'var(--cockpit-purple-bg)', color: 'var(--cockpit-purple-500)', label: 'Practice', pulse: false }
@@ -141,6 +142,28 @@ export default function CockpitHeader({
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
         </button>
+
+        {onNavigatorToggle && (
+          // Colors are hardcoded (not theme-var) on purpose: the header bg is
+          // dark navy in both light and dark modes, so this button matches the
+          // adjacent theme-toggle's convention. The violet tint signals
+          // "intel module" (navigator). Don't CSS-var these without
+          // understanding the header doesn't theme-switch.
+          <button
+            onClick={onNavigatorToggle}
+            className="flex items-center gap-1 px-2 py-[3px] text-[11px] font-medium cursor-pointer transition-colors"
+            style={{
+              borderRadius: '3px',
+              border: '1px solid rgba(49,46,129,0.4)',
+              background: navigatorEnabled ? 'rgba(107,78,200,0.18)' : 'rgba(15,13,41,0.5)',
+              color: navigatorEnabled ? '#C4B5FD' : '#78716C',
+            }}
+            title={`Conversation Navigator ${navigatorEnabled ? 'on' : 'off'}`}
+            aria-pressed={navigatorEnabled}
+          >
+            <span>Nav {navigatorEnabled ? 'on' : 'off'}</span>
+          </button>
+        )}
 
         <button
           onClick={onThemeToggle}
