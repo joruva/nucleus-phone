@@ -4,6 +4,7 @@ const { rbac } = require('../middleware/rbac');
 const { pool } = require('../db');
 const { runChat } = require('../lib/ask-nucleus');
 const { escalateToTom } = require('../lib/escalation');
+const { logEvent } = require('../lib/debug-log');
 
 const router = Router();
 
@@ -95,12 +96,8 @@ router.post('/', async (req, res) => {
       return;
     }
     console.error('[ask route] error:', err.name, err.message, err.stack);
-    // DEBUG_ASK_ERRORS=1 surfaces raw error.message to the client via SSE.
-    // Leave off in normal operation — raw API errors can leak config details.
-    const debugErrors = process.env.DEBUG_ASK_ERRORS === '1';
-    const clientMsg = debugErrors
-      ? `Error: ${err.message || 'Something went wrong'}`
-      : 'Something went wrong. Try again.';
+    logEvent('error', 'ask', `${err.name}: ${err.message}`, { level: 'error', caller: req.user?.identity, detail: { stack: err.stack?.substring(0, 500) } });
+    const clientMsg = 'Something went wrong. Try again.';
     sendSSE({ type: 'error', message: clientMsg });
   } finally {
     if (!res.writableEnded) res.end();

@@ -22,6 +22,8 @@ const { track } = require('../lib/inflight');
 const { processEquipmentChunk } = require('../lib/equipment-pipeline');
 const { summarizeCall, MIN_TRANSCRIPT_LENGTH } = require('../lib/call-summarizer');
 const { capturePhones } = require('../lib/phone-extractor');
+const { logEvent } = require('../lib/debug-log');
+const { touch } = require('../lib/health-tracker');
 
 const router = Router();
 
@@ -32,6 +34,7 @@ const twilioWebhook = twilio.webhook({
 });
 
 router.post('/', twilioWebhook, async (req, res) => {
+  touch('twilio.transcription');
   res.sendStatus(204);
 
   const { TranscriptionText, TranscriptionData, TranscriptionEvent, Track, CallSid } = req.body;
@@ -50,6 +53,8 @@ router.post('/', twilioWebhook, async (req, res) => {
 
   // Twilio sends transcription-stopped when all chunks are delivered —
   // trigger post-call summarization here instead of racing in recording.js.
+  logEvent('webhook', 'twilio.transcription', `event=${TranscriptionEvent || 'chunk'}, track=${Track || 'n/a'}, hasText=${!!transcriptText}`);
+
   if (TranscriptionEvent === 'transcription-stopped' && CallSid) {
     track(
       runPostCallSummary(CallSid).catch(err => {

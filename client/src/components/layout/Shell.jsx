@@ -35,6 +35,18 @@ export default function Shell({ identity, role, onLogout, deviceStatus, emailRea
           <span className="text-[11px] font-semibold tracking-[2px] uppercase" style={{ color: '#F97316' }}>Phone</span>
         </div>
         <div className="flex items-center gap-3">
+          {role === 'admin' && (
+            <a
+              href="/debug"
+              onClick={(e) => { e.preventDefault(); navigate('/debug'); }}
+              className="text-[11px] font-semibold tracking-wide transition-colors hover:text-white"
+              style={{ color: '#F59E0B', textDecoration: 'none' }}
+              title="Debug Dashboard"
+              aria-label="Debug Dashboard"
+            >
+              🔧
+            </a>
+          )}
           <a
             href="/study-guide.html"
             target="_blank"

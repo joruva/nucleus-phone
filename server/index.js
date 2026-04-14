@@ -13,6 +13,7 @@ const { attachWebSocket } = require('./lib/live-analysis');
 const { startScheduler: startCurator } = require('./lib/equipment-curator');
 const { createHmac, timingSafeEqual } = require('crypto');
 const hubCatalog = require('./lib/hub-catalog-store');
+const { flush: flushDebugLog } = require('./lib/debug-log');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -75,6 +76,7 @@ app.use('/api/signals', require('./routes/signals'));
 app.use('/api/ask', require('./routes/ask'));
 app.use('/api/apollo/phone-webhook', require('./routes/apollo-webhook'));
 app.use('/api/admin', apiKeyAuth, rbac('admin'), require('./routes/admin'));
+app.use('/api/debug', apiKeyAuth, rbac('admin'), require('./routes/debug'));
 
 // Hub event webhook — HMAC-authenticated, triggers catalog refresh on product.* events.
 // Uses raw body capture to avoid JSON re-serialization HMAC divergence.
@@ -133,6 +135,8 @@ if (require.main === module) {
   process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully');
     if (httpServer) httpServer.close(); // stop accepting new connections
+    // Flush debug event buffer before drain consumes the time budget
+    await flushDebugLog();
     await drain(8000); // 8s budget, 2s margin for cleanup
     process.exit(0);
   });

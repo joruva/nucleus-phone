@@ -10,6 +10,7 @@ import Cockpit from './pages/Cockpit';
 import Scoreboard from './pages/Scoreboard';
 import Activity from './pages/Activity';
 import AskNucleus from './pages/AskNucleus';
+import Debug from './pages/Debug';
 import useTwilioDevice from './hooks/useTwilioDevice';
 import useCallState from './hooks/useCallState';
 
@@ -106,6 +107,7 @@ function AppContent() {
         element={
           <Cockpit
             identity={identity}
+            role={role}
             callState={callState}
             twilioStatus={twilioHook.status}
             onSendDigits={twilioHook.sendDigits}
@@ -159,6 +161,9 @@ function AppContent() {
             }
           />
         )}
+        {role === 'admin' && (
+          <Route path="/debug" element={<Debug />} />
+        )}
         <Route path="/activity" element={<Activity identity={identity} role={role} emailReady={emailReady} />} />
         <Route path="/history" element={<Navigate to="/activity" replace />} />
         <Route path="/summaries" element={<Navigate to="/activity" replace />} />
@@ -169,6 +174,7 @@ function AppContent() {
           element={
             <Cockpit
               identity={identity}
+              role={role}
               callState={callState}
               twilioStatus={twilioHook.status}
               forcedId="sim-mike-garza"

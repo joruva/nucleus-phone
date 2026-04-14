@@ -14,6 +14,8 @@
  * in case a route is accidentally mounted without session auth.
  */
 
+const { logEvent } = require('../lib/debug-log');
+
 const ROLE_HIERARCHY = {
   external_caller: 0,
   caller: 1,
@@ -28,10 +30,12 @@ function rbac(minRole) {
   return function rbacMiddleware(req, res, next) {
     const user = req.user;
     if (!user) {
+      logEvent('error', 'rbac', `401: unauthenticated request to ${req.originalUrl}`, { level: 'error', detail: { url: req.originalUrl, method: req.method } });
       return res.status(401).json({ error: 'Not authenticated' });
     }
     const actual = ROLE_HIERARCHY[user.role] ?? -1;
     if (actual < required) {
+      logEvent('error', 'rbac', `403: ${user.identity} (${user.role}) blocked from ${req.originalUrl} (requires ${minRole})`, { level: 'error', caller: user.identity, detail: { url: req.originalUrl, role: user.role, required: minRole } });
       return res.status(403).json({
         error: `Requires ${minRole} role`,
       });

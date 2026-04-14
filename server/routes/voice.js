@@ -3,6 +3,8 @@ const twilio = require('twilio');
 const { VoiceResponse } = require('../lib/twilio');
 const { getConference } = require('../lib/conference');
 const { pool } = require('../db');
+const { logEvent } = require('../lib/debug-log');
+const { touch } = require('../lib/health-tracker');
 
 const router = Router();
 
@@ -14,6 +16,8 @@ const twilioWebhook = twilio.webhook({
 
 // POST /api/voice — TwiML webhook called by Twilio when PWA connects via Voice SDK
 router.post('/', twilioWebhook, async (req, res) => {
+  touch('twilio.webhook');
+  logEvent('webhook', 'twilio.voice', `TwiML request: action=${req.body.Action || 'initiate'}, conf=${req.body.ConferenceName || 'none'}`);
   try {
     const { ConferenceName, Action, Muted } = req.body;
     const twiml = new VoiceResponse();

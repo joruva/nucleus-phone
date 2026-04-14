@@ -2,6 +2,9 @@
  * lib/vapi.js — Vapi API client for simulation calls.
  */
 
+const { logEvent } = require('./debug-log');
+const { touch } = require('./health-tracker');
+
 const VAPI_BASE = 'https://api.vapi.ai';
 
 async function vapiRequest(method, endpoint, body, { usePublicKey } = {}) {
@@ -26,8 +29,11 @@ async function vapiRequest(method, endpoint, body, { usePublicKey } = {}) {
     const res = await fetch(`${VAPI_BASE}/${endpoint}`, opts);
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Vapi ${method} ${endpoint} (${res.status}): ${text.substring(0, 300)}`);
+      const err = new Error(`Vapi ${method} ${endpoint} (${res.status}): ${text.substring(0, 300)}`);
+      logEvent('integration', 'vapi.api', `${method} ${endpoint} failed: ${res.status}`, { level: 'error', detail: { status: res.status, body: text.substring(0, 200) } });
+      throw err;
     }
+    touch('vapi.api');
     // DELETE returns empty body
     if (res.status === 204 || res.headers.get('content-length') === '0') return {};
     return res.json();

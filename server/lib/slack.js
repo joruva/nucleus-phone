@@ -1,4 +1,6 @@
 const { formatDuration } = require('./format');
+const { logEvent } = require('./debug-log');
+const { touch } = require('./health-tracker');
 
 async function sendSlackAlert(message) {
   const webhookUrl = process.env.SLACK_SALES_WEBHOOK_URL;
@@ -16,11 +18,14 @@ async function sendSlackAlert(message) {
 
     if (!res.ok) {
       console.error('Slack alert failed:', res.status);
+      logEvent('integration', 'slack', `alert webhook failed: ${res.status}`, { level: 'error' });
       return false;
     }
+    touch('slack');
     return true;
   } catch (err) {
     console.error('Slack alert error:', err.message);
+    logEvent('integration', 'slack', `alert error: ${err.message}`, { level: 'error' });
     return false;
   }
 }

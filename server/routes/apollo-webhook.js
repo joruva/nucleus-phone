@@ -14,6 +14,8 @@
 
 const { Router } = require('express');
 const { pool } = require('../db');
+const { logEvent } = require('../lib/debug-log');
+const { touch } = require('../lib/health-tracker');
 
 const router = Router();
 
@@ -35,9 +37,8 @@ function pickDirectPhoneWithType(phoneNumbers) {
 // POST /api/apollo/phone-webhook — Apollo sends phone numbers here
 router.post('/', async (req, res) => {
   try {
-    if (process.env.DEBUG_APOLLO_WEBHOOK) {
-      console.log('Apollo webhook raw:', JSON.stringify(req.body).substring(0, 500));
-    }
+    touch('apollo.webhook');
+    logEvent('webhook', 'apollo.webhook', 'phone delivery received', { detail: { keys: Object.keys(req.body || {}) } });
 
     const body = req.body;
 

@@ -3,6 +3,9 @@
  * Generates pre-call briefings from assembled contact data.
  */
 
+const { logEvent } = require('./debug-log');
+const { touch } = require('./health-tracker');
+
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-sonnet-4-6';
 const CACHE_TTL = 15 * 60 * 1000; // 15 minutes
@@ -414,13 +417,16 @@ async function generateRapportIntel(contactData) {
 
     const intel = JSON.parse(text);
     intel.fallback = false;
+    touch('anthropic');
     setCache(key, intel);
     return intel;
   } catch (err) {
     if (err.name === 'AbortError') {
       console.warn('Claude API timed out after 6s — returning fallback');
+      logEvent('integration', 'anthropic', 'timeout after 6s', { level: 'warn' });
     } else {
       console.error('Claude rapport generation failed:', err.message);
+      logEvent('integration', 'anthropic', `failed: ${err.message}`, { level: 'error' });
     }
     return buildFallback(contactData);
   } finally {

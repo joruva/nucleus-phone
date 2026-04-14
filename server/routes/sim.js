@@ -15,6 +15,8 @@ const { scoreTranscript } = require('../lib/sim-scorer');
 const { sendSlackAlert, sendAdminReport, sendSystemAlert, formatSimScorecard, formatAdminReport } = require('../lib/slack');
 const { broadcast } = require('../lib/live-analysis');
 const { processEquipmentChunk } = require('../lib/equipment-pipeline');
+const { logEvent } = require('../lib/debug-log');
+const { touch } = require('../lib/health-tracker');
 const team = require('../config/team.json');
 
 const router = Router();
@@ -566,11 +568,13 @@ async function webhookHandler(req, res) {
   // Hard-require webhook secret
   const secret = process.env.VAPI_WEBHOOK_SECRET;
   if (!secret || req.headers['x-vapi-secret'] !== secret) {
+    logEvent('webhook', 'sim.webhook', 'rejected: invalid webhook secret', { level: 'error' });
     return res.status(401).json({ error: 'Invalid webhook secret' });
   }
 
   const { message } = req.body || {};
   if (!message) return res.sendStatus(200);
+  touch('vapi.webhook');
 
   // ── Handle real-time transcript events (practice call live analysis) ──
   if (message.type === 'transcript') {
@@ -598,6 +602,7 @@ async function webhookHandler(req, res) {
   res.sendStatus(200);
 
   console.log(`sim webhook: end-of-call for ${vapiCallId} — transcript=${transcript ? 'yes' : 'MISSING'} recording=${recording ? 'yes' : 'MISSING'}`);
+  logEvent('webhook', 'sim.webhook', `end-of-call: transcript=${transcript ? 'yes' : 'MISSING'}, recording=${recording ? 'yes' : 'MISSING'}`, { callId: vapiCallId });
 
   // Vapi sometimes fires the end-of-call webhook before transcript is ready.
   // If transcript is missing, wait 5s and fetch directly from the Vapi API.

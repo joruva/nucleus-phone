@@ -26,6 +26,7 @@ import CompanyVernacular from '../components/cockpit/CompanyVernacular';
 import DataSourceIndicator from '../components/ui/DataSourceIndicator';
 import useLiveAnalysis from '../hooks/useLiveAnalysis';
 import TestScenarioButton from '../components/cockpit/TestScenarioButton';
+import DebugOverlay from '../components/cockpit/DebugOverlay';
 import { getNextUncalled } from '../lib/api';
 
 function deriveCallPhase(twilioStatus, callData) {
@@ -167,7 +168,7 @@ function RealCallLayout({ d, callPhase, liveAnalysis, liveCallId, testCallId, on
   );
 }
 
-export default function Cockpit({ identity, callState, twilioStatus, forcedId, onSendDigits, onToggleMute, muted }) {
+export default function Cockpit({ identity, role, callState, twilioStatus, forcedId, onSendDigits, onToggleMute, muted }) {
   const params = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const id = forcedId || params.id;
@@ -393,6 +394,14 @@ export default function Cockpit({ identity, callState, twilioStatus, forcedId, o
           onSendDigits={onSendDigits}
           onToggleMute={onToggleMute}
           muted={muted}
+        />
+      )}
+
+      {role === 'admin' && callPhase !== 'pre' && (
+        <DebugOverlay
+          wsConnected={liveAnalysis.connected}
+          callPhase={callPhase}
+          callId={liveCallId}
         />
       )}
     </div>

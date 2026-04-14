@@ -12,6 +12,7 @@
 const WebSocket = require('ws');
 const { WebSocketServer } = WebSocket;
 const jwt = require('jsonwebtoken');
+const { logEvent } = require('./debug-log');
 
 // callId -> Set<ws>
 const subscriptions = new Map();
@@ -73,6 +74,7 @@ function attachWebSocket(httpServer) {
         if (!subscriptions.has(msg.callId)) subscriptions.set(msg.callId, new Set());
         subscriptions.get(msg.callId).add(ws);
         console.log(`live-analysis: client subscribed to ${msg.callId} (${subscriptions.get(msg.callId).size} listeners)`);
+        logEvent('state_change', 'live-analysis', `subscribe: ${msg.callId}`, { detail: { callId: msg.callId, listeners: subscriptions.get(msg.callId).size } });
       }
 
       if (msg.type === 'unsubscribe') {
@@ -82,7 +84,10 @@ function attachWebSocket(httpServer) {
     });
 
     ws.on('close', () => {
-      if (ws._callId) unsubClient(ws._callId, ws);
+      if (ws._callId) {
+        logEvent('state_change', 'live-analysis', `disconnect: ${ws._callId}`, { detail: { callId: ws._callId } });
+        unsubClient(ws._callId, ws);
+      }
     });
   });
 }
@@ -170,4 +175,15 @@ function parseCookie(cookieHeader, name) {
   return null;
 }
 
-module.exports = { attachWebSocket, broadcast, cleanupCall, getCallEquipment };
+/**
+ * Return active WebSocket connection stats for the debug endpoint.
+ */
+function getConnectionStats() {
+  const websockets = [];
+  for (const [callId, clients] of subscriptions) {
+    if (clients.size > 0) websockets.push({ callId, listenerCount: clients.size });
+  }
+  return { websockets, total: websockets.length };
+}
+
+module.exports = { attachWebSocket, broadcast, cleanupCall, getCallEquipment, getConnectionStats };

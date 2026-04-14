@@ -514,6 +514,25 @@ async function initSchema() {
     `);
     console.log('captured_phones column ready');
 
+    // ── Debug events (production debug mode) ────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS debug_events (
+        id SERIAL PRIMARY KEY,
+        ts TIMESTAMPTZ DEFAULT NOW(),
+        category VARCHAR(30) NOT NULL,
+        source VARCHAR(80) NOT NULL,
+        level VARCHAR(10) DEFAULT 'info',
+        summary TEXT NOT NULL,
+        detail JSONB,
+        call_id TEXT,
+        caller_identity VARCHAR(50)
+      );
+      CREATE INDEX IF NOT EXISTS idx_debug_events_ts ON debug_events(ts DESC);
+      CREATE INDEX IF NOT EXISTS idx_debug_events_category ON debug_events(category, ts DESC);
+      CREATE INDEX IF NOT EXISTS idx_debug_events_call_id ON debug_events(call_id) WHERE call_id IS NOT NULL;
+    `);
+    console.log('debug_events table ready');
+
   } finally {
     client.release();
   }

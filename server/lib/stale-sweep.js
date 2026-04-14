@@ -89,9 +89,28 @@ async function sweepStaleSims() {
   }
 }
 
+async function pruneDebugEvents() {
+  if (process.env.DEBUG !== '1') return;
+  try {
+    // Use ts for both ordering and delete predicate — id/ts monotonicity
+    // isn't guaranteed (clock skew, manual inserts). Leverages idx_debug_events_ts.
+    const { rowCount } = await pool.query(
+      `DELETE FROM debug_events WHERE ts < (SELECT ts FROM debug_events ORDER BY ts DESC OFFSET 1000 LIMIT 1)`,
+    );
+    if (rowCount > 0) console.log(`stale-sweep: pruned ${rowCount} debug event(s)`);
+  } catch (err) {
+    // OFFSET beyond row count returns no rows — the subquery yields NULL,
+    // and the DELETE matches nothing. That's the normal "under 1000" case.
+    if (!err.message.includes('does not exist')) {
+      console.error('stale-sweep: debug prune failed:', err.message);
+    }
+  }
+}
+
 async function runSweep() {
   await sweepStaleCalls();
   await sweepStaleSims();
+  await pruneDebugEvents();
 }
 
 let intervalId;
