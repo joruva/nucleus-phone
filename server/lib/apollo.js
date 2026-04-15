@@ -13,6 +13,8 @@
  * With requestPhone=false: reveals all matching contacts for email-only enrichment (1 credit each).
  */
 
+const { throwHttpError } = require('./http-error');
+
 const BASE_URL = 'https://api.apollo.io/api/v1';
 const TIMEOUT_MS = 15000;
 const PHONE_REVEAL_CREDIT_COST = 8; // Apollo charges 8 credits for mobile phone reveals
@@ -29,7 +31,6 @@ function pickDirectPhone(phoneNumbers) {
     && p.status_cd !== 'invalid_number',
   );
   if (direct?.sanitized_number) return direct.sanitized_number;
-  // Only fall back to non-corporate types — skip 'work'/'other' which are usually HQ lines
   return null;
 }
 
@@ -58,7 +59,8 @@ async function matchPerson({ firstName, lastName, organization, email }) {
     ...(email && { email }),
   };
 
-  const resp = await fetch(`${BASE_URL}/people/match`, {
+  const endpoint = 'people/match';
+  const resp = await fetch(`${BASE_URL}/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify(body),
@@ -67,7 +69,7 @@ async function matchPerson({ firstName, lastName, organization, email }) {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`Apollo match failed: ${resp.status} ${text.substring(0, 200)}`);
+    throwHttpError(resp, text, 'POST', endpoint, { service: 'Apollo' });
   }
 
   const data = await resp.json();
@@ -98,7 +100,8 @@ async function revealPerson(apolloId, requestPhone = true) {
     body.webhook_url = PHONE_WEBHOOK_URL;
   }
 
-  const resp = await fetch(`${BASE_URL}/people/match`, {
+  const endpoint = 'people/match';
+  const resp = await fetch(`${BASE_URL}/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify(body),
@@ -107,7 +110,7 @@ async function revealPerson(apolloId, requestPhone = true) {
 
   if (!resp.ok) {
     const text = await resp.text().catch(() => '');
-    throw new Error(`Apollo reveal failed: ${resp.status} ${text.substring(0, 200)}`);
+    throwHttpError(resp, text, 'POST', endpoint, { service: 'Apollo' });
   }
 
   const data = await resp.json();
@@ -143,10 +146,11 @@ async function revealPerson(apolloId, requestPhone = true) {
  */
 async function searchPeopleByCompany(domain, { titleFilters = DEFAULT_TITLE_FILTERS, perPage = 10, requestPhone = true } = {}) {
   const apiKey = process.env.APOLLO_API_KEY;
-  if (!apiKey) return { previews: [], contacts: [], creditsUsed: 0 };
+  if (!apiKey) return { previews: [], contacts: [], creditsUsed: 0, failures: [] };
 
   // Step 1: Resolve domain → Apollo org ID (free, no credits)
-  const orgResp = await fetch(`${BASE_URL}/organizations/search`, {
+  const orgEndpoint = 'organizations/search';
+  const orgResp = await fetch(`${BASE_URL}/${orgEndpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify({ q_organization_domains: domain, per_page: 1 }),
@@ -155,21 +159,22 @@ async function searchPeopleByCompany(domain, { titleFilters = DEFAULT_TITLE_FILT
 
   if (!orgResp.ok) {
     const text = await orgResp.text().catch(() => '');
-    throw new Error(`Apollo org search failed: ${orgResp.status} ${text.substring(0, 200)}`);
+    throwHttpError(orgResp, text, 'POST', orgEndpoint, { service: 'Apollo' });
   }
 
   const orgData = await orgResp.json();
   const org = orgData.organizations?.[0];
-  if (!org?.id) return { previews: [], contacts: [], creditsUsed: 0 };
+  if (!org?.id) return { previews: [], contacts: [], creditsUsed: 0, failures: [] };
 
   // Verify domain match — reject if Apollo returns a different org
   const orgDomain = (org.primary_domain || '').toLowerCase();
   if (orgDomain && orgDomain !== domain.toLowerCase()) {
-    return { previews: [], contacts: [], creditsUsed: 0 };
+    return { previews: [], contacts: [], creditsUsed: 0, failures: [] };
   }
 
   // Step 2: Search people by org ID + title filters (free search)
-  const searchResp = await fetch(`${BASE_URL}/mixed_people/api_search`, {
+  const searchEndpoint = 'mixed_people/api_search';
+  const searchResp = await fetch(`${BASE_URL}/${searchEndpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
     body: JSON.stringify({
@@ -183,7 +188,7 @@ async function searchPeopleByCompany(domain, { titleFilters = DEFAULT_TITLE_FILT
 
   if (!searchResp.ok) {
     const text = await searchResp.text().catch(() => '');
-    throw new Error(`Apollo people search failed: ${searchResp.status} ${text.substring(0, 200)}`);
+    throwHttpError(searchResp, text, 'POST', searchEndpoint, { service: 'Apollo' });
   }
 
   const searchData = await searchResp.json();
@@ -197,6 +202,7 @@ async function searchPeopleByCompany(domain, { titleFilters = DEFAULT_TITLE_FILT
     : previews;
   const creditCost = requestPhone ? PHONE_REVEAL_CREDIT_COST : 1;
   const contacts = [];
+  const failures = [];
   let creditsUsed = 0;
 
   for (const preview of toReveal) {
@@ -207,11 +213,22 @@ async function searchPeopleByCompany(domain, { titleFilters = DEFAULT_TITLE_FILT
         creditsUsed += creditCost;
       }
     } catch (err) {
-      console.error(`Failed to reveal ${preview.id}:`, err.message);
+      // Collect structured failure — caller decides whether partial failure
+      // (e.g. 429 rate limit, 500 outage) is bad enough to alert on.
+      failures.push({
+        id: preview.id,
+        status: err.status,
+        endpoint: err.endpoint,
+        body: typeof err.body === 'string' ? err.body : null,
+        message: err.message,
+      });
+      console.error(
+        `Apollo reveal failed for ${preview.id} (status ${err.status || 'n/a'}): ${err.message}`,
+      );
     }
   }
 
-  return { previews, contacts, creditsUsed };
+  return { previews, contacts, creditsUsed, failures };
 }
 
 module.exports = { matchPerson, revealPerson, searchPeopleByCompany, DEFAULT_TITLE_FILTERS, PHONE_REVEAL_CREDIT_COST };

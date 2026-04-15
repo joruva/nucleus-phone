@@ -4,6 +4,7 @@
 
 const { logEvent } = require('./debug-log');
 const { touch } = require('./health-tracker');
+const { throwHttpError } = require('./http-error');
 
 const VAPI_BASE = 'https://api.vapi.ai';
 
@@ -29,15 +30,8 @@ async function vapiRequest(method, endpoint, body, { usePublicKey } = {}) {
     const res = await fetch(`${VAPI_BASE}/${endpoint}`, opts);
     if (!res.ok) {
       const text = await res.text();
-      // err.body is a property for programmatic inspection — keep it full.
-      // err.message is truncated because it ends up in logs.
-      const err = new Error(`Vapi ${method} ${endpoint} (${res.status}): ${text.substring(0, 300)}`);
-      err.status = res.status;
-      err.body = text;
-      err.endpoint = endpoint;
-      err.method = method;
       logEvent('integration', 'vapi.api', `${method} ${endpoint} failed: ${res.status}`, { level: 'error', detail: { status: res.status, body: text.substring(0, 200) } });
-      throw err;
+      throwHttpError(res, text, method, endpoint, { service: 'Vapi' });
     }
     touch('vapi.api');
     // DELETE returns empty body

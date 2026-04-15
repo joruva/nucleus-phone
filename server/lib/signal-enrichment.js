@@ -147,6 +147,18 @@ async function runBatchEnrichment({ tiers = ['spear', 'targeted'], resumeFrom = 
           creditsUsed += result.creditsUsed;
         }
 
+        // Surface partial reveal failures loudly — if Apollo is rate-limiting
+        // or 500ing, we need to see it rather than silently return fewer contacts.
+        if (result.failures?.length) {
+          const failuresDominated = result.failures.length > contacts.length;
+          const logFn = failuresDominated ? console.error : console.warn;
+          logFn(
+            `Apollo reveal partial failure for ${company.domain}: ` +
+            `${result.failures.length} failed, ${contacts.length} succeeded. ` +
+            `Statuses: ${result.failures.map(f => f.status || 'n/a').join(',')}`,
+          );
+        }
+
         // Upsert contacts into v35_pb_contacts
         const norm = normalizeCompanyName(company.company_name);
         for (const c of contacts) {
