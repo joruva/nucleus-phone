@@ -126,8 +126,7 @@ export default function useLiveAnalysis(callId, enabled = true) {
           }
           case 'response_suggestion':
             if (msg.data) {
-              const entry = { ...msg.data, _receivedAt: Date.now() };
-              setSuggestion(entry);
+              const entry = { ...msg.data, _seq: ++suggestionSeqRef.current };
               setSuggestionHistory(prev => [...prev.slice(-4), entry]);
             }
             return;
@@ -154,9 +153,8 @@ export default function useLiveAnalysis(callId, enabled = true) {
                 const entry = {
                   ...pred.suggestion,
                   source: 'prediction',
-                  _receivedAt: Date.now(),
+                  _seq: ++suggestionSeqRef.current,
                 };
-                setSuggestion(entry);
                 setSuggestionHistory(prev => [...prev.slice(-4), entry]);
                 predictionRef.current = null; // consume — don't re-match
               }
@@ -201,15 +199,8 @@ export default function useLiveAnalysis(callId, enabled = true) {
     };
   }, [callId, enabled, reset]);
 
-  // Callback so the SuggestionCard can dismiss without going through setState
-  // plumbing — also used for auto-dismiss cleanup
-  const dismissSuggestion = useCallback(() => setSuggestion(null), []);
-
   return {
-    // Equipment (existing)
     equipment, sizing, recommendation, connected,
-    // Navigator
-    phase, sentiment, suggestion, suggestionHistory, objection, navigatorStatus,
-    dismissSuggestion,
+    phase, sentiment, suggestionHistory, objection, navigatorStatus,
   };
 }

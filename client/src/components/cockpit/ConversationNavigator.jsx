@@ -77,7 +77,7 @@ export default function ConversationNavigator({
             const isLatest = i === suggestionHistory.length - 1;
             return (
               <div
-                key={s._receivedAt}
+                key={s._seq}
                 style={{ opacity: isLatest ? 1 : 0.55 }}
               >
                 <SuggestionCard suggestion={s} />
