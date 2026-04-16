@@ -39,7 +39,7 @@ export default function LiveAnalysis({ data, active, contact, callId, isPractice
       style={{
         border: `2px solid ${detected ? 'var(--cockpit-live-500)' : 'var(--cockpit-live-border)'}`,
         background: 'var(--cockpit-card)',
-        minHeight: idle ? '120px' : '280px',
+        minHeight: idle ? '80px' : detected ? '280px' : '120px',
         animation: active && connected && !detected
           ? 'live-border-shimmer 3s ease-in-out infinite'
           : 'none',

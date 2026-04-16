@@ -30,9 +30,8 @@ export default function ReactorContainer({ data, active, contact, callId, isPrac
         <ConversationNavigator
           phase={safe.phase}
           sentiment={safe.sentiment}
-          suggestion={safe.suggestion}
+          suggestionHistory={safe.suggestionHistory}
           navigatorStatus={safe.navigatorStatus}
-          onDismissSuggestion={safe.dismissSuggestion}
         />
       )}
     </div>

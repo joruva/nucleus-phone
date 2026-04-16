@@ -14,7 +14,8 @@ export default function useLiveAnalysis(callId, enabled = true) {
   // Conversation Navigator state
   const [phase, setPhase] = useState(null);                 // { phase, key_topic }
   const [sentiment, setSentiment] = useState(null);         // { customer, momentum, history[] }
-  const [suggestion, setSuggestion] = useState(null);       // { text, trigger, confidence, source }
+  const [suggestion, setSuggestion] = useState(null);       // latest suggestion (for compat)
+  const [suggestionHistory, setSuggestionHistory] = useState([]); // last 5 suggestions
   const [objection, setObjection] = useState(null);         // { objection, rebuttal }
   const [navigatorStatus, setNavigatorStatus] = useState('ok');
 
@@ -39,6 +40,7 @@ export default function useLiveAnalysis(callId, enabled = true) {
     setPhase(null);
     setSentiment(null);
     setSuggestion(null);
+    setSuggestionHistory([]);
     setObjection(null);
     setNavigatorStatus('ok');
     seenRef.current.clear();
@@ -123,7 +125,11 @@ export default function useLiveAnalysis(callId, enabled = true) {
             return;
           }
           case 'response_suggestion':
-            if (msg.data) setSuggestion({ ...msg.data, _receivedAt: Date.now() });
+            if (msg.data) {
+              const entry = { ...msg.data, _receivedAt: Date.now() };
+              setSuggestion(entry);
+              setSuggestionHistory(prev => [...prev.slice(-4), entry]);
+            }
             return;
           case 'objection_detected':
             if (msg.data) setObjection(msg.data);
@@ -145,11 +151,13 @@ export default function useLiveAnalysis(callId, enabled = true) {
             const pattern = pred?.pattern?.trim();
             if (text && pattern && pred?.suggestion) {
               if (text.toLowerCase().includes(pattern.toLowerCase())) {
-                setSuggestion({
+                const entry = {
                   ...pred.suggestion,
                   source: 'prediction',
                   _receivedAt: Date.now(),
-                });
+                };
+                setSuggestion(entry);
+                setSuggestionHistory(prev => [...prev.slice(-4), entry]);
                 predictionRef.current = null; // consume — don't re-match
               }
             }
@@ -201,7 +209,7 @@ export default function useLiveAnalysis(callId, enabled = true) {
     // Equipment (existing)
     equipment, sizing, recommendation, connected,
     // Navigator
-    phase, sentiment, suggestion, objection, navigatorStatus,
+    phase, sentiment, suggestion, suggestionHistory, objection, navigatorStatus,
     dismissSuggestion,
   };
 }

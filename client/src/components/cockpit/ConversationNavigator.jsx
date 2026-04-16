@@ -1,17 +1,6 @@
+import { useRef, useEffect } from 'react';
 import SentimentArc from './SentimentArc';
 import SuggestionCard from './SuggestionCard';
-
-/**
- * ConversationNavigator — sentiment + phase + suggestion composition.
- *
- * Layout:
- *   [ SentimentArc — 56px ]
- *   [ PHASE — key_topic ]             (cp-label typography)
- *   [ SuggestionCard ]                 (only when suggestion present)
- *
- * When no suggestion is present, the minimal footprint (arc + phase) stays
- * visible as an ambient readout.
- */
 
 const PHASE_LABEL = {
   greeting: 'Greeting',
@@ -27,13 +16,19 @@ const PHASE_LABEL = {
 export default function ConversationNavigator({
   phase,
   sentiment,
-  suggestion,
+  suggestionHistory = [],
   navigatorStatus = 'ok',
-  onDismissSuggestion,
 }) {
   const degraded = navigatorStatus === 'degraded';
   const phaseLabel = phase?.phase ? (PHASE_LABEL[phase.phase] || phase.phase) : '—';
   const keyTopic = phase?.key_topic;
+  const scrollRef = useRef(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [suggestionHistory.length]);
 
   return (
     <div
@@ -72,11 +67,24 @@ export default function ConversationNavigator({
         )}
       </div>
 
-      {suggestion && (
-        <SuggestionCard
-          suggestion={suggestion}
-          onDismiss={onDismissSuggestion}
-        />
+      {suggestionHistory.length > 0 && (
+        <div
+          ref={scrollRef}
+          className="flex flex-col gap-1.5 overflow-y-auto"
+          style={{ maxHeight: '240px' }}
+        >
+          {suggestionHistory.map((s, i) => {
+            const isLatest = i === suggestionHistory.length - 1;
+            return (
+              <div
+                key={s._receivedAt}
+                style={{ opacity: isLatest ? 1 : 0.55 }}
+              >
+                <SuggestionCard suggestion={s} />
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );

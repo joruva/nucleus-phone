@@ -1,7 +1,3 @@
-import { useEffect, useRef } from 'react';
-
-const AUTO_DISMISS_MS = 30_000;
-
 const SOURCE_LABEL = {
   prediction: 'predicted',
   phase_bank: 'phase',
@@ -10,28 +6,12 @@ const SOURCE_LABEL = {
 };
 
 /**
- * SuggestionCard — single-slot, auto-dismissing response suggestion.
+ * SuggestionCard — persistent suggestion rendered in a scrollable history.
  *
- * Design:
- * - Expands to fit full suggestion text (no line clamp).
- * - Violet left accent for normal suggestions; amber for exit_assist /
- *   objection rebuttals (styling is driven by `suggestion.trigger`).
- * - Auto-dismiss after 30s. Replacement resets the timer.
- * - Parent guarantees `suggestion` is non-null before rendering.
- *
- * `onDismiss` is stashed in a ref so the effect dep list is just the receive
- * timestamp — callers don't have to guarantee a memoized callback to keep
- * the timer from thrashing on every parent render.
+ * No auto-dismiss — cards persist in the history (last 5). Parent controls
+ * opacity to fade older entries.
  */
-export default function SuggestionCard({ suggestion, onDismiss }) {
-  const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
-
-  useEffect(() => {
-    const timer = setTimeout(() => dismissRef.current?.(), AUTO_DISMISS_MS);
-    return () => clearTimeout(timer);
-  }, [suggestion._receivedAt]);
-
+export default function SuggestionCard({ suggestion }) {
   const trigger = suggestion.trigger || 'default';
   const isExit = trigger === 'exit_assist' || trigger === 'objection';
   const accent = isExit
@@ -52,7 +32,6 @@ export default function SuggestionCard({ suggestion, onDismiss }) {
         borderLeftWidth: '3px',
       }}
       role="status"
-      aria-live="polite"
       data-trigger={trigger}
     >
       <div className="flex-1 min-w-0">
@@ -74,14 +53,6 @@ export default function SuggestionCard({ suggestion, onDismiss }) {
           </span>
         )}
       </div>
-      <button
-        onClick={onDismiss}
-        className="shrink-0 text-[11px] leading-none px-1.5 py-1 rounded hover:bg-black/5 transition-colors"
-        style={{ color: 'var(--cockpit-text-muted)' }}
-        aria-label="Dismiss suggestion"
-      >
-        ✕
-      </button>
     </div>
   );
 }

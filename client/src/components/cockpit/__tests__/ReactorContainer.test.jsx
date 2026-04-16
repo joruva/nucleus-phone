@@ -14,6 +14,7 @@ describe('ReactorContainer', () => {
     phase: { phase: 'discovery', key_topic: 'current compressor' },
     sentiment: { customer: 'positive', momentum: 'building', history: [{ customer: 'positive' }] },
     suggestion: null,
+    suggestionHistory: [],
     objection: null,
     navigatorStatus: 'ok',
     dismissSuggestion: () => {},
@@ -35,8 +36,8 @@ describe('ReactorContainer', () => {
     expect(screen.queryByText(/Discovery/)).not.toBeInTheDocument();
   });
 
-  test('suggestion renders when present', () => {
-    const data = { ...baseData, suggestion: { text: 'Ask about budget', _receivedAt: 1 } };
+  test('suggestion renders when present in history', () => {
+    const data = { ...baseData, suggestionHistory: [{ text: 'Ask about budget', _receivedAt: 1 }] };
     render(<ReactorContainer data={data} navigatorEnabled={true} />);
     expect(screen.getByText(/Ask about budget/)).toBeInTheDocument();
   });
