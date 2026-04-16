@@ -97,9 +97,18 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
     const email = identity.email;
     const contactId = identity.hubspotContactId;
 
+    const warnings = [];
+    function softQuery(source, promise, fallback) {
+      return promise.catch(err => {
+        console.warn(`cockpit: ${source} failed:`, err.stack || err.message);
+        warnings.push({ source, message: err.message });
+        return fallback;
+      });
+    }
+
     const queries = [
       // 0: Cross-channel interaction history
-      lookupCustomer({ phone, email, contactId }).catch(() => null),
+      softQuery('interactionHistory', lookupCustomer({ phone, email, contactId }), null),
 
       // 1: Prior nucleus-phone calls (match by phone_suffix7 OR email)
       (() => {
@@ -117,7 +126,7 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
           clauses.push(`LOWER(lead_email) = LOWER($${params.length})`);
         }
         if (!clauses.length) return Promise.resolve([]);
-        return pool.query(
+        return softQuery('priorCalls', pool.query(
           `SELECT id, created_at, caller_identity, disposition, qualification,
                   notes, duration_seconds, products_discussed,
                   ai_summary, ai_action_items
@@ -125,26 +134,26 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
            WHERE (${clauses.join(' OR ')}) AND status = 'completed'
            ORDER BY created_at DESC LIMIT 20`,
           params
-        ).then(r => r.rows).catch(() => []);
+        ).then(r => r.rows), []);
       })(),
 
       // 2: Discovery pipeline data (case-insensitive exact match)
       identity.company
-        ? pool.query(
+        ? softQuery('pipelineData', pool.query(
             `SELECT domain, company_name, segment, status, discovery_source,
                     created_at, enriched_at
              FROM v35_discovery_queue
              WHERE LOWER(company_name) = LOWER($1)
              ORDER BY created_at DESC LIMIT 5`,
             [identity.company]
-          ).then(r => r.rows).catch(() => [])
+          ).then(r => r.rows), [])
         : Promise.resolve([]),
 
       // 3: ICP score + signal metadata (single query via LEFT JOIN)
       // Normalize both sides (strip LLC, Inc, Corp, etc.) for exact match.
       // Prefix LIKE was too greedy — "Shaw" matched "Shawnee State University".
       identity.company
-        ? pool.query(
+        ? softQuery('icpAndSignal', pool.query(
             `SELECT lr.domain,
                     lr.icp_score, lr.prequalify_class, lr.prequalify_reasoning,
                     lr.industry_naics, lr.industry_description,
@@ -163,34 +172,34 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
              )) = $1
              LIMIT 1`,
             [normalizeCompanyName(identity.company)]
-          ).then(r => r.rows[0] || null).catch(() => null)
+          ).then(r => r.rows[0] || null), null)
         : Promise.resolve(null),
 
       // 4: QA results
       email
-        ? pool.query(
+        ? softQuery('qaIntel', pool.query(
             `SELECT fields_available, validation_status, validated_at
              FROM qa_results
              WHERE email = $1
              ORDER BY validated_at DESC LIMIT 1`,
             [email]
-          ).then(r => r.rows[0] || null).catch(() => null)
+          ).then(r => r.rows[0] || null), null)
         : Promise.resolve(null),
 
       // 5: Email engagement from webhook events
       email
-        ? pool.query(
+        ? softQuery('emailEngagement', pool.query(
             `SELECT event_type, created_at, payload_json->>'campaign_name' AS campaign_name
              FROM v35_webhook_events
              WHERE lead_email = $1
              ORDER BY created_at DESC LIMIT 10`,
             [email]
-          ).then(r => r.rows).catch(() => [])
+          ).then(r => r.rows), [])
         : Promise.resolve([]),
 
       // 6: Company data from HubSpot
       identity.hubspotCompanyId
-        ? getCompany(identity.hubspotCompanyId).catch(() => null)
+        ? softQuery('companyData', getCompany(identity.hubspotCompanyId), null)
         : Promise.resolve(null),
 
     ];
@@ -207,20 +216,16 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
 
     // Step 2b: Fetch enriched contacts using domain from ICP query
     const companyDomain = icpAndSignal?.domain || null;
-    let enrichedContacts = [];
-    if (companyDomain) {
-      try {
-        const { rows } = await pool.query(
+    const enrichedContacts = companyDomain
+      ? await softQuery('enrichedContacts', pool.query(
           `SELECT full_name, title, email, phone, linkedin_profile_url
            FROM v35_pb_contacts
            WHERE domain = $1
            ORDER BY phone IS NOT NULL DESC, email IS NOT NULL DESC
            LIMIT 10`,
           [companyDomain]
-        );
-        enrichedContacts = rows;
-      } catch (err) { console.warn('enrichedContacts query failed:', err.message); }
-    }
+        ).then(r => r.rows), [])
+      : [];
 
     // Split combined query #3 into ICP score (with company enrichment) and signal metadata
     const icpScore = icpAndSignal
@@ -304,6 +309,7 @@ router.get('/:identifier', apiKeyAuth, rbac('external_caller'), async (req, res)
       signalMetadata,
       companyVernacular,
       enrichedContacts: enrichedContacts || [],
+      ...(warnings.length ? { _warnings: warnings } : {}),
     });
   } catch (err) {
     console.error('Cockpit assembly failed:', err.message);
