@@ -1,12 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { initiateCall, joinCall, endCall } from '../lib/api';
 
+// US-only E.164 normalization (mirrors server/lib/identity-resolver-inline.js:toE164)
 function toE164(phone) {
   if (!phone) return null;
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) return `+1${digits}`;
   if (digits.length === 11 && digits[0] === '1') return `+${digits}`;
-  if (phone.startsWith('+') && digits.length >= 10) return `+${digits}`;
   return null;
 }
 

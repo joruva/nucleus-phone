@@ -40,7 +40,8 @@ export default function usePwaInstall() {
     sessionStorage.setItem(DISMISSED_KEY, '1');
   }, []);
 
-  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+  const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const canPrompt = !!deferredPrompt;
   const showBanner = !installed && !dismissed && (canPrompt || isIos);
 
