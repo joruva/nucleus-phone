@@ -168,6 +168,18 @@ function getCallEquipment(callId) {
 }
 
 /**
+ * Clear accumulated equipment and broadcast dedup state for a call.
+ * Used by the verbal reset trigger — rep says a phrase, system starts fresh.
+ * Preserves the array reference (splice, not replace) so in-flight code
+ * holding the old reference sees the empty array.
+ */
+function resetCallEquipment(callId) {
+  const arr = callEquipment.get(callId);
+  if (arr) arr.splice(0);
+  seen.delete(callId);
+}
+
+/**
  * Get the highest-priority air quality class detected from conversation context.
  */
 function getCallAirQuality(callId) {
@@ -214,4 +226,4 @@ function getConnectionStats() {
   return { websockets, total: websockets.length };
 }
 
-module.exports = { attachWebSocket, broadcast, cleanupCall, getCallEquipment, getCallAirQuality, setCallAirQuality, getConnectionStats };
+module.exports = { attachWebSocket, broadcast, cleanupCall, getCallEquipment, resetCallEquipment, getCallAirQuality, setCallAirQuality, getConnectionStats };

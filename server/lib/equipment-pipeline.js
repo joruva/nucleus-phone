@@ -10,9 +10,25 @@ const { extractEquipment } = require('./entity-extractor');
 const { lookupEquipment } = require('./equipment-lookup');
 const { calculateDemand, recommendSystem, addQualityFilters, deriveSalesChannel } = require('./sizing-engine');
 const { logSighting } = require('./equipment-db');
-const { broadcast, getCallEquipment, getCallAirQuality, setCallAirQuality } = require('./live-analysis');
+const { broadcast, getCallEquipment, resetCallEquipment, getCallAirQuality, setCallAirQuality } = require('./live-analysis');
 const { addVariant } = require('./equipment-curator');
 const { AQ_RANK } = require('./aq-constants');
+
+// Proximity window for generic supersession (Approach B).
+// Specific equipment mentions only consume generic entries added within this many
+// processEquipmentChunk calls. At ~3-5s per chunk, 20 ≈ 60-100s of conversation.
+const SUPERSEDE_WINDOW = 20;
+
+// Per-call chunk counter for proximity-based supersession.
+// Stores { count, ts } so cleanupPipelineState can sweep stale entries
+// from calls that terminated abnormally (never hit the /status callback).
+const chunkCounters = new Map();
+const STALE_CALL_MS = 60 * 60 * 1000; // 1 hour
+
+// Verbal reset trigger — rep says this phrase to clear accumulated equipment
+// and have the lead restate from scratch. Regex is intentionally specific:
+// requires "start fresh" or "recapture" near "equipment" to avoid false positives.
+const RESET_TRIGGER = /\b(?:start\s+fresh\s+on\s+(?:your\s+)?equipment|re-?confirm\s+(?:your\s+)?equipment\s+list|recapture\s+(?:your\s+)?equipment)\b/i;
 
 // Default CFM estimates for equipment categories when no specific model is matched.
 // Based on manufacturer pre-install guides, industry standards, and forum data.
@@ -41,6 +57,14 @@ const CATEGORY_DEFAULTS = {
   grinder:      { cfm_typical: 6,   psi_required: 90,  duty_cycle_pct: 60, air_quality_class: 'general' },
   welder:       { cfm_typical: 5,   psi_required: 80,  duty_cycle_pct: 40, air_quality_class: 'general' },
 };
+
+// Pre-compiled word-boundary regexes for CATEGORY_DEFAULTS keywords.
+// Built once at module load to avoid constructing new RegExp objects on every
+// transcript chunk. Uses \b word boundaries so short keywords like "press"
+// don't false-match inside words like "compressor" or "impressive".
+const CATEGORY_REGEXES = Object.fromEntries(
+  Object.keys(CATEGORY_DEFAULTS).map(kw => [kw, new RegExp(`\\b${kw}\\b`, 'i')])
+);
 
 // Known CNC manufacturers — when we see "Haas" with no model, apply CNC defaults
 const CNC_MANUFACTURERS = new Set([
@@ -85,8 +109,20 @@ function detectAirQualityContext(text) {
 }
 
 /**
+ * Match entity text against CATEGORY_DEFAULTS keywords using pre-compiled regexes.
+ * Returns the matched category name or null.
+ */
+function matchCategory(text) {
+  for (const [keyword, re] of Object.entries(CATEGORY_REGEXES)) {
+    if (re.test(text)) return keyword;
+  }
+  return null;
+}
+
+/**
  * Get default specs for an equipment entity that didn't match the catalog.
  * Uses manufacturer name, model keywords, and raw mention to infer category.
+ * Returns { ...specs, confidence, _category } or null.
  */
 function getCategoryDefault(entity) {
   const text = [entity.manufacturer, entity.model, entity.raw_mention]
@@ -94,19 +130,70 @@ function getCategoryDefault(entity) {
 
   // Check known CNC manufacturers first
   if (entity.manufacturer && CNC_MANUFACTURERS.has(entity.manufacturer.toLowerCase())) {
-    return { ...CATEGORY_DEFAULTS.cnc, confidence: 'category_default' };
+    return { ...CATEGORY_DEFAULTS.cnc, confidence: 'category_default', _category: 'cnc' };
   }
 
   // Match keywords with word boundaries to avoid false positives
   // (e.g., "press" must not match "compressor" or "impressive")
-  for (const [keyword, defaults] of Object.entries(CATEGORY_DEFAULTS)) {
-    const re = new RegExp(`\\b${keyword}\\b`, 'i');
-    if (re.test(text)) {
-      return { ...defaults, confidence: 'category_default' };
+  const cat = matchCategory(text);
+  if (cat) return { ...CATEGORY_DEFAULTS[cat], confidence: 'category_default', _category: cat };
+
+  return null;
+}
+
+/**
+ * Infer the equipment category for a specific (non-generic) entity.
+ * Used to match specific mentions back to generic ones for supersession.
+ * Shares matchCategory() with getCategoryDefault to avoid duplicate regexes.
+ */
+function inferCategory(entity) {
+  if (entity.manufacturer && CNC_MANUFACTURERS.has(entity.manufacturer.toLowerCase())) {
+    return 'cnc';
+  }
+  const text = [entity.manufacturer, entity.model, entity.raw_mention]
+    .filter(Boolean).join(' ').toLowerCase();
+  return matchCategory(text);
+}
+
+/**
+ * Supersede generic accumulated entries when a specific entity refines them.
+ *
+ * Example: "5 CNC machines" (generic, count 5) followed by "three Haas VF-2s"
+ * (specific, count 3) → generic count reduced to 2. The Haas machines ARE some
+ * of the 5 CNCs, not additional equipment.
+ *
+ * Only supersedes entries that:
+ *   (A) match the same equipment category (e.g., both are 'cnc')
+ *   (B) were added within SUPERSEDE_WINDOW chunks (proximity guard)
+ *
+ * Mutates accumulated in place. Returns the number of units consumed from generics.
+ */
+function supersedeGenerics(accumulated, category, specificCount, chunkNum) {
+  if (!category || specificCount <= 0) return 0;
+
+  let remaining = specificCount;
+  let consumed = 0;
+
+  for (let i = accumulated.length - 1; i >= 0 && remaining > 0; i--) {
+    const entry = accumulated[i];
+    if (!entry._meta.isGeneric || entry._meta.category !== category) continue;
+    if (chunkNum - (entry._meta.chunkNum || 0) > SUPERSEDE_WINDOW) continue;
+
+    const take = Math.min(entry.count, remaining);
+    entry.count -= take;
+    remaining -= take;
+    consumed += take;
+
+    if (entry.count <= 0) {
+      accumulated.splice(i, 1);
     }
   }
 
-  return null;
+  if (consumed > 0) {
+    console.log(`[SIZING-DIAG] superseded ${consumed} generic '${category}' units (${specificCount} specific arrived, ${remaining} unmatched)`);
+  }
+
+  return consumed;
 }
 
 /**
@@ -145,9 +232,21 @@ function resolveAirQuality(accumulated, callId) {
  * @param {string} text     - Transcript text to process
  */
 async function processEquipmentChunk(callId, callType, dbCallId, text) {
-  // Scan every transcript chunk for air quality context (AS9100, aerospace, etc.)
-  // regardless of whether equipment is mentioned. Context may arrive in a different
-  // chunk than the equipment.
+  const counter = chunkCounters.get(callId);
+  const chunkNum = (counter ? counter.count : 0) + 1;
+  chunkCounters.set(callId, { count: chunkNum, ts: Date.now() });
+
+  // Verbal reset: rep says trigger phrase → clear equipment, start fresh.
+  // Detected before extraction so the same chunk can contain both the reset
+  // phrase and new equipment mentions (e.g. "let me re-confirm your equipment
+  // list — so you said three Haas VF-2s?").
+  if (RESET_TRIGGER.test(text)) {
+    console.log(`[SIZING-DIAG] ${callId} EQUIPMENT RESET triggered at chunk ${chunkNum}`);
+    resetCallEquipment(callId);
+    chunkCounters.set(callId, { count: 0, ts: Date.now() });
+    broadcast(callId, { type: 'equipment_reset', data: { chunkNum } });
+  }
+
   const detectedAq = detectAirQualityContext(text);
   let aqEscalated = false;
   if (detectedAq) aqEscalated = setCallAirQuality(callId, detectedAq);
@@ -231,14 +330,42 @@ async function processEquipmentChunk(callId, callType, dbCallId, text) {
 
       const cfm = parseFloat(specs?.cfm_typical) || 0;
       if (cfm > 0 && accumulated.length < 100) {
-        accumulated.push({
+        const isGeneric = !entity.manufacturer && !entity.model;
+        const category = categoryFallback?._category || inferCategory(entity);
+
+        // Sizing data (read by calculateDemand, resolveAirQuality) lives at top level.
+        // Pipeline-internal tracking lives in _meta so it never leaks to consumers.
+        const entry = {
           cfm_typical: cfm,
           duty_cycle_pct: parseInt(specs.duty_cycle_pct, 10) || 50,
           psi_required: parseInt(specs.psi_required, 10) || 90,
           air_quality_class: specs.air_quality_class || 'general',
           count: entity.count,
-        });
+          _meta: {
+            manufacturer: entity.manufacturer || null,
+            model: entity.model || null,
+            confidence: specs.confidence || 'catalog',
+            isGeneric,
+            category,
+            chunkNum,
+            rawMention: entity.raw_mention || '',
+          },
+        };
+
+        if (!isGeneric && category) {
+          supersedeGenerics(accumulated, category, entity.count, chunkNum);
+        }
+
+        accumulated.push(entry);
         sizingChanged = true;
+
+        if (process.env.SIZING_DEBUG) {
+          console.debug(`[SIZING-DIAG] ${callId} accumulated[${accumulated.length - 1}]:`, JSON.stringify({
+            mfg: entity.manufacturer, model: entity.model, count: entity.count,
+            cfm, isGeneric, category, chunkNum, confidence: specs.confidence,
+            raw: entity.raw_mention,
+          }));
+        }
       }
     } catch (err) {
       console.error(`equipment-pipeline: failed for ${entity.manufacturer} ${entity.model}:`, err.message);
@@ -247,6 +374,20 @@ async function processEquipmentChunk(callId, callType, dbCallId, text) {
 
   if (sizingChanged) {
     const demand = calculateDemand(accumulated);
+
+    if (process.env.SIZING_DEBUG) {
+      console.debug(`[SIZING-DIAG] ${callId} pre-sizing state:`, JSON.stringify({
+        itemCount: accumulated.length,
+        equipmentCount: demand?.equipmentCount,
+        totalCfmAtDuty: demand?.totalCfmAtDuty,
+        adjustedCfm: demand?.adjustedCfm,
+        items: accumulated.map((a, i) => ({
+          i, mfg: a._meta.manufacturer, model: a._meta.model, count: a.count,
+          cfm: a.cfm_typical, generic: a._meta.isGeneric,
+        })),
+      }));
+    }
+
     broadcast(callId, { type: 'sizing_updated', data: demand });
 
     const recommendation = recommendSystem(demand);
@@ -259,4 +400,22 @@ async function processEquipmentChunk(callId, callType, dbCallId, text) {
   }
 }
 
-module.exports = { processEquipmentChunk, detectAirQualityContext, resolveAirQuality, AQ_CONTEXT_PATTERNS };
+/**
+ * Clean up pipeline state for a completed call.
+ * Also sweeps stale entries from calls that terminated abnormally
+ * (never hit the /status callback) to bound the chunkCounters leak surface.
+ */
+function cleanupPipelineState(callId) {
+  chunkCounters.delete(callId);
+
+  const now = Date.now();
+  for (const [id, { ts }] of chunkCounters) {
+    if (now - ts > STALE_CALL_MS) chunkCounters.delete(id);
+  }
+}
+
+module.exports = {
+  processEquipmentChunk, detectAirQualityContext, resolveAirQuality,
+  AQ_CONTEXT_PATTERNS, supersedeGenerics, inferCategory, cleanupPipelineState,
+  SUPERSEDE_WINDOW, RESET_TRIGGER,
+};

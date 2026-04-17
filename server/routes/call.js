@@ -11,6 +11,7 @@ const {
 } = require('../lib/conference');
 const { cleanupCall } = require('../lib/live-analysis');
 const { cleanupConversation } = require('../lib/conversation-pipeline');
+const { cleanupPipelineState } = require('../lib/equipment-pipeline');
 const { sendSlackAlert } = require('../lib/slack');
 
 const router = Router();
@@ -351,6 +352,7 @@ router.post('/status', twilioWebhook, async (req, res) => {
     removeConference(FriendlyName);
     // TODO: capture getCallEventLog(FriendlyName) before cleanup when real-call debrief is added
     cleanupConversation(FriendlyName);
+    cleanupPipelineState(FriendlyName);
     cleanupCall(FriendlyName);
   }
 
