@@ -42,14 +42,15 @@ router.post('/', makeTwilioWebhook('/api/voice/investor'), (req, res) => {
 
   if (!forwardTo) {
     console.error('investor: INVESTOR_FORWARD_NUMBER not set');
-    twiml.say('Thank you for calling Joruva. We are unable to take your call right now. Please email tom@joruva.com.');
+    twiml.say({ voice: 'Polly.Joanna-Generative' },
+      'Thank you for calling joh-ROO-vah. We are unable to take your call right now. Please email tom at joh-ROO-vah dot com.');
     return res.type('text/xml').send(twiml.toString());
   }
 
   console.log(`investor: inbound from ${callerPhone} → forwarding to ${forwardTo}`);
 
   twiml.say({
-    voice: 'Polly.Joanna',
+    voice: 'Polly.Joanna-Generative',
   }, 'Connecting you with Tom Russo. Please hold.');
 
   // Forward to Tom's cell. callerId shows the investor DID on Tom's screen
@@ -81,7 +82,7 @@ router.post('/dial-complete', makeTwilioWebhook('/api/voice/investor/dial-comple
 
   // Strategy C: record VM, then voicemail-complete fires Slack alert + SMS to Tom.
   twiml.say({
-    voice: 'Polly.Joanna',
+    voice: 'Polly.Joanna-Generative',
   }, 'Tom is not available right now. Please leave your name, your firm, and a callback number, and Tom will return your call within one business day. Press the pound key when finished.');
   twiml.record({
     maxLength: 180,
@@ -90,7 +91,7 @@ router.post('/dial-complete', makeTwilioWebhook('/api/voice/investor/dial-comple
     recordingStatusCallbackEvent: 'completed',
     recordingStatusCallbackMethod: 'POST',
   });
-  twiml.say('We did not receive a message. Goodbye.');
+  twiml.say({ voice: 'Polly.Joanna-Generative' }, 'We did not receive a message. Goodbye.');
 
   res.type('text/xml').send(twiml.toString());
 });

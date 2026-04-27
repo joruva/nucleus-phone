@@ -42,8 +42,8 @@ router.post('/', makeTwilioWebhook('/api/voice/main'), (req, res) => {
   });
 
   gather.say({
-    voice: 'Polly.Joanna',
-  }, 'Thanks for calling Joruva Industrial. Press 1 for sales, press 2 for investor relations, or stay on the line.');
+    voice: 'Polly.Joanna-Generative',
+  }, 'Thanks for calling joh-ROO-vah Industrial. Press 1 for sales, press 2 for investor relations, or stay on the line.');
 
   // No input → fall through to the Vapi AI receptionist (existing flow).
   twiml.redirect({ method: 'POST' }, vapiFallbackUrl);
