@@ -1,14 +1,16 @@
 /**
- * main-line.js — IVR menu for the master Joruva inbound line.
+ * main-line.js — IVR menu for the toll-free Joruva Industrial line.
  *
- * Sits in front of /api/voice/incoming. Callers hear a short menu:
- *   Press 1 → existing sales/demo flow (per-DID routing in incoming.js)
- *   Press 2 → investor relations (rings Tom's cell, no recording)
- *   No input → falls through to sales (Sean's demo experience: press 1 or wait)
+ * Wired to +18447132636 (the public number on the website + business plan).
+ * Default audience is compressed-air customers reaching the Vapi AI
+ * receptionist (Eryn / Jack John / Dexter). The IVR adds a press-2 branch
+ * for investors reading the 3-page business plan.
  *
- * Per-rep direct DIDs (Ryann, Paul) bypass this route — their Twilio voice URL
- * still points to /api/voice/incoming directly. Only the master 800 line points
- * here.
+ *   Press 2          → investor relations (rings Tom's cell, no recording)
+ *   No input / else  → Vapi AI receptionist (existing customer-service flow)
+ *
+ * Per-rep direct DIDs and the Phoenix line (+16026000188) are untouched —
+ * their Twilio voice URLs still point to /api/voice/incoming directly.
  */
 
 const { Router } = require('express');
@@ -18,6 +20,7 @@ const { VoiceResponse } = require('../lib/twilio');
 const router = Router();
 
 const baseUrl = process.env.APP_URL || 'https://nucleus-phone.onrender.com';
+const vapiFallbackUrl = process.env.VAPI_INBOUND_URL || 'https://api.vapi.ai/twilio/inbound_call';
 
 function makeTwilioWebhook(path) {
   return twilio.webhook({
@@ -40,10 +43,10 @@ router.post('/', makeTwilioWebhook('/api/voice/main'), (req, res) => {
 
   gather.say({
     voice: 'Polly.Joanna',
-  }, 'Thanks for calling Joruva Industrial. For sales, press 1 or stay on the line. For investor relations, press 2.');
+  }, 'Thanks for calling Joruva Industrial. Press 2 for investor relations, or stay on the line.');
 
-  // No input → fall through to sales (Sean presses nothing → demo continues)
-  twiml.redirect({ method: 'POST' }, `${baseUrl}/api/voice/incoming`);
+  // No input → fall through to the Vapi AI receptionist (existing flow).
+  twiml.redirect({ method: 'POST' }, vapiFallbackUrl);
 
   res.type('text/xml').send(twiml.toString());
 });
@@ -57,8 +60,8 @@ router.post('/menu', makeTwilioWebhook('/api/voice/main/menu'), (req, res) => {
   if (digit === '2') {
     twiml.redirect({ method: 'POST' }, `${baseUrl}/api/voice/investor`);
   } else {
-    // "1" or anything else → sales flow
-    twiml.redirect({ method: 'POST' }, `${baseUrl}/api/voice/incoming`);
+    // Anything else → Vapi AI receptionist (existing customer-service flow).
+    twiml.redirect({ method: 'POST' }, vapiFallbackUrl);
   }
 
   res.type('text/xml').send(twiml.toString());
