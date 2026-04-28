@@ -32,7 +32,7 @@ const { sendSlackAlert, formatCallAlert } = require('../../lib/slack');
 const { addNoteToContact } = require('../../lib/hubspot');
 const { syncInteraction } = require('../../lib/interaction-sync');
 const { lookupCustomer } = require('../../lib/customer-lookup');
-const { __testSetUser } = require('../../middleware/auth');
+const { __testSetUser, invalidateUser } = require('../../middleware/auth');
 
 const API_KEY = 'test-api-key';
 
@@ -108,6 +108,21 @@ describe('GET /api/history', () => {
       .get('/api/history')
       .set('x-api-key', API_KEY)
       .expect(401);
+  });
+
+  test('LIST query orders by created_at DESC, npc.id DESC (tie-break)', async () => {
+    mockSession('ryann');
+    pool.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ count: '0' }], rowCount: 1 });
+
+    await request(app)
+      .get('/api/history')
+      .set('Cookie', 'nucleus_session=fake-token')
+      .expect(200);
+
+    const dataQuery = pool.query.mock.calls[0][0];
+    expect(dataQuery).toMatch(/ORDER BY npc\.created_at DESC,\s*npc\.id DESC/);
   });
 
   test('returns calls and total count for authenticated caller', async () => {
@@ -453,6 +468,186 @@ describe('GET /api/history/:id/timeline', () => {
   });
 });
 
+/* ───────────── Bearer auth on GET routes ───────────── */
+
+describe('Bearer auth on GET routes', () => {
+  test('GET /api/history accepts Authorization: Bearer', async () => {
+    mockSession('ryann');
+    pool.query
+      .mockResolvedValueOnce({ rows: [SAMPLE_CALL], rowCount: 1 })
+      .mockResolvedValueOnce({ rows: [{ count: '1' }], rowCount: 1 });
+
+    const res = await request(app)
+      .get('/api/history')
+      .set('Authorization', 'Bearer fake-jwt')
+      .expect(200);
+
+    expect(res.body.calls).toHaveLength(1);
+  });
+
+  test('GET /api/history bearer path enforces non-admin ownership filter', async () => {
+    // Proof that bearer ran (not sessionAuth fallback): we send NO cookie,
+    // and key jwt.verify so it ONLY succeeds for the bearer-token string.
+    // If bearerOrSession's discriminator inverted, sessionAuth would receive
+    // the request, find no cookie, and 401 — making this test fail at the
+    // status assertion before the ownership-filter assertions ever run.
+    const kateId = 8001;
+    __testSetUser({
+      id: kateId,
+      email: 'kate@joruva.com',
+      identity: 'kate',
+      role: 'caller',
+      displayName: 'kate',
+    });
+    jwt.verify.mockImplementation((token) => {
+      if (token === 'kate-bearer') return { userId: kateId };
+      throw new Error('unknown token');
+    });
+    pool.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ count: '0' }], rowCount: 1 });
+
+    await request(app)
+      .get('/api/history?caller=ryann')
+      .set('Authorization', 'Bearer kate-bearer')
+      .expect(200);
+
+    const dataParams = pool.query.mock.calls[0][1];
+    expect(dataParams).toContain('kate');
+    expect(dataParams).not.toContain('ryann');
+  });
+
+  test('GET /api/history/:id accepts Bearer', async () => {
+    mockSession('ryann');
+    pool.query.mockResolvedValueOnce({ rows: [SAMPLE_CALL], rowCount: 1 });
+
+    await request(app)
+      .get('/api/history/1')
+      .set('Authorization', 'Bearer fake-jwt')
+      .expect(200);
+  });
+
+  test('GET /api/history/:id/timeline accepts Bearer', async () => {
+    mockSession('ryann');
+    pool.query.mockResolvedValueOnce({
+      rows: [{
+        lead_phone: '+16025551234',
+        lead_email: null,
+        hubspot_contact_id: '101',
+        lead_company: 'Acme',
+        lead_name: 'Jane',
+        conference_name: 'nucleus-call-abc',
+      }],
+      rowCount: 1,
+    });
+    lookupCustomer.mockResolvedValueOnce({ interactions: [] });
+
+    await request(app)
+      .get('/api/history/1/timeline')
+      .set('Authorization', 'Bearer fake-jwt')
+      .expect(200);
+  });
+
+  test('malformed Authorization header → 401', async () => {
+    await request(app)
+      .get('/api/history')
+      .set('Authorization', 'NotBearer xyz')
+      .expect(401);
+  });
+
+  test('Bearer with no token → 401', async () => {
+    await request(app)
+      .get('/api/history')
+      .set('Authorization', 'Bearer ')
+      .expect(401);
+  });
+
+  test('Bearer with invalid jwt → 401', async () => {
+    jwt.verify.mockImplementation(() => { throw new Error('invalid jwt'); });
+    await request(app)
+      .get('/api/history')
+      .set('Authorization', 'Bearer bad-jwt')
+      .expect(401);
+  });
+
+  test('Bearer with token whose userId no longer maps to active user → 401', async () => {
+    // jwt verify succeeds with a userId we explicitly evict from the cache,
+    // and the DB query for that user returns no row (simulating deleted /
+    // inactive user). The invalidateUser call is not optional defense — if a
+    // future beforeEach pre-seeds the user cache, this test would silently go
+    // green via a cache hit instead of exercising the DB-miss path.
+    invalidateUser(999999);
+    jwt.verify.mockReturnValue({ userId: 999999 });
+    pool.query.mockResolvedValueOnce({ rows: [] });
+
+    await request(app)
+      .get('/api/history')
+      .set('Authorization', 'Bearer fake-jwt')
+      .expect(401);
+  });
+
+  test('Bearer GET succeeds without X-Requested-With', async () => {
+    // sessionAuth's CSRF check is gated on `req.method !== 'GET' && !== 'HEAD'`,
+    // so a session GET would also pass without the header — this test isn't
+    // proving bearer is CSRF-immune in general, just that the header isn't a
+    // hidden requirement on the bearer path either. (The dialer never sends
+    // non-GET to history routes; if it ever does, add a parallel POST test.)
+    mockSession('ryann');
+    pool.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ count: '0' }], rowCount: 1 });
+
+    await request(app)
+      .get('/api/history')
+      .set('Authorization', 'Bearer fake-jwt')
+      // intentionally NO X-Requested-With
+      .expect(200);
+  });
+
+  test('Bearer wins over cookie when both are present', async () => {
+    // Register two distinct users — one resolved via cookie token, one via
+    // bearer token — and key jwt.verify on the input. If the discriminator in
+    // bearerOrSession was inverted (or removed), the wrong user's identity
+    // would land in the ownership-filter params. This is the only assertion
+    // that ACTUALLY proves bearer beat cookie — a single-user mockSession
+    // would pass either way.
+    const cookieUserId = 7001;
+    const bearerUserId = 7002;
+    __testSetUser({
+      id: cookieUserId,
+      email: 'cookie-user@joruva.com',
+      identity: 'cookie-user',
+      role: 'caller',
+      displayName: 'cookie-user',
+    });
+    __testSetUser({
+      id: bearerUserId,
+      email: 'bearer-user@joruva.com',
+      identity: 'bearer-user',
+      role: 'caller',
+      displayName: 'bearer-user',
+    });
+    jwt.verify.mockImplementation((token) => {
+      if (token === 'bearer-token') return { userId: bearerUserId };
+      if (token === 'cookie-token') return { userId: cookieUserId };
+      throw new Error('unknown token');
+    });
+    pool.query
+      .mockResolvedValueOnce({ rows: [], rowCount: 0 })
+      .mockResolvedValueOnce({ rows: [{ count: '0' }], rowCount: 1 });
+
+    await request(app)
+      .get('/api/history')
+      .set('Cookie', 'nucleus_session=cookie-token')
+      .set('Authorization', 'Bearer bearer-token')
+      .expect(200);
+
+    const dataParams = pool.query.mock.calls[0][1];
+    expect(dataParams).toContain('bearer-user');
+    expect(dataParams).not.toContain('cookie-user');
+  });
+});
+
 /* ───────────── POST /api/history/:id/disposition ───────────── */
 
 describe('POST /api/history/:id/disposition', () => {
@@ -693,5 +888,17 @@ describe('POST /api/history/:id/disposition', () => {
       .set('x-api-key', API_KEY)
       .send({ disposition: 'connected' })
       .expect(500);
+  });
+
+  // Regression guard: POST disposition was NOT migrated to bearerOrSession
+  // (web automation depends on the cookie+API-key path). A bearer header on
+  // POST should be ignored — only API key + session-cookie+CSRF flows work.
+  test('Bearer header alone on POST is rejected (still apiKeyAuth+sessionAuth)', async () => {
+    jwt.verify.mockImplementation(() => { throw new Error('invalid'); });
+    await request(app)
+      .post('/api/history/1/disposition')
+      .set('Authorization', 'Bearer some-token')
+      .send({ disposition: 'connected' })
+      .expect(401);
   });
 });

@@ -124,6 +124,56 @@ async function sessionAuth(req, res, next) {
   return res.status(401).json({ error: 'Invalid session' });
 }
 
+// Bearer-token auth for native iOS dialer. Reads `Authorization: Bearer <jwt>`,
+// verifies a nucleus_session JWT (post-e5p shape only — `userId` required;
+// the legacy `{identity, role, email}` payload sessionAuth still accepts is
+// rejected here on purpose: the dialer is brand-new, no legacy bearer tokens
+// can exist in the wild). Then loads the user fresh from DB (5s cache).
+// No CSRF check — bearer tokens aren't auto-attached by browsers, so XHR/CORS
+// rules + token possession are the boundary. No cookie fallback — that's
+// bearerOrSession's job.
+async function bearerAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing bearer token' });
+  }
+  const token = header.slice('Bearer '.length).trim();
+  if (!token) return res.status(401).json({ error: 'Missing bearer token' });
+
+  let payload;
+  try {
+    payload = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Invalid bearer token' });
+  }
+
+  if (!payload.userId) {
+    return res.status(401).json({ error: 'Invalid bearer token' });
+  }
+
+  try {
+    const user = await loadUserById(payload.userId);
+    if (!user) return res.status(401).json({ error: 'Session revoked' });
+    req.user = { ...user, authSource: 'bearer' };
+    return next();
+  } catch (err) {
+    console.error('[bearerAuth] user lookup failed:', err.message);
+    return res.status(500).json({ error: 'Auth error' });
+  }
+}
+
+// Composer used by routes the dialer hits AND web hits — picks bearerAuth when
+// the client sent an Authorization header, sessionAuth otherwise. Order matters:
+// presence of `authorization` is the discriminator, NOT presence of the cookie,
+// because as of M1 the dialer's URLSession can carry legacy cookies in
+// HTTPCookieStorage alongside its own bearer token. We want bearer to win in
+// that case. (If a future M2+ change removes URLSession cookie storage, this
+// reasoning becomes redundant, not wrong — keep the discriminator anyway.)
+function bearerOrSession(req, res, next) {
+  if (req.headers.authorization) return bearerAuth(req, res, next);
+  return sessionAuth(req, res, next);
+}
+
 // Accepts API key OR session cookie. API key callers get a synthetic admin
 // principal — the key is a shared secret only given to server-side automation,
 // so equating it with admin is intentional. Wrong key is a hard 401.
@@ -160,6 +210,8 @@ function __testSetUser(user) {
 module.exports = {
   apiKeyAuth,
   sessionAuth,
+  bearerAuth,
+  bearerOrSession,
   loadUserById,
   invalidateUser,
   SESSION_TTL_SECONDS,
