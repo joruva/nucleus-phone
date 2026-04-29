@@ -61,7 +61,8 @@ app.use('/api/token', apiKeyAuth, rbac('external_caller'), require('./routes/tok
 app.use('/api/voice/incoming', require('./routes/incoming'));
 app.use('/api/voice', require('./routes/voice'));
 app.use('/api/call', require('./routes/call'));
-app.use('/api/call/recording-status', require('./routes/recording'));
+app.use('/api/call/recording-status', require('./routes/recording-status'));
+app.use('/api/recording', require('./routes/recording'));
 app.use('/api/contacts', require('./routes/contacts'));
 app.use('/api/history', require('./routes/history'));
 app.use('/api/cockpit', require('./routes/cockpit'));
