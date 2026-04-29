@@ -3,7 +3,11 @@
  * scripts/retrigger-phone-webhooks.js
  *
  * Re-trigger Apollo phone webhooks for already-revealed contacts.
- * This costs ZERO credits — Apollo caches reveals and re-sends the webhook.
+ *
+ * WARNING: This is NOT free. Confirmed 2026-04-20: re-reveal costs 9 credits
+ * (8 mobile + 1 enrichment) per contact — same as a fresh reveal. Apollo does
+ * not cache phone reveals. Running this against all ~952 orphaned contacts
+ * would cost 8,568 credits. See memory/runbooks/apollo-api.md for history.
  *
  * Calls /people/match with reveal_phone_number=true for each contact that
  * has an apollo_person_id. The webhook delivers the real mobile/direct number,
