@@ -1,5 +1,18 @@
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
+const { requireEnv } = require('./lib/require-env');
+
+// Boot pre-flight — refuse to start with a half-configured deploy. Runs before
+// any route module is required so a missing var fails the process here, not
+// later inside a request handler. See server/lib/require-env.js.
+requireEnv([
+  'JWT_SECRET',
+  'ENTRA_DIALER_CLIENT_ID',
+  'ENTRA_TENANT_ID',
+  'ENABLE_NATIVE_EXCHANGE',
+  'RECORDING_SIGNING_KEY',
+]);
+
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');

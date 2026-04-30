@@ -41,14 +41,6 @@ async function findActiveUserByEmail(email) {
   return rows[0] || null;
 }
 
-// Fail at boot, not at first login. A misconfigured deploy missing JWT_SECRET
-// would otherwise mint tokens via `jwt.sign(payload, undefined, ...)`, which
-// throws `secretOrPrivateKey must have a value` at the user — surfacing as a
-// 500 with a stack trace in logs. We'd rather the process refuse to start.
-if (!process.env.JWT_SECRET) {
-  throw new Error('JWT_SECRET must be set — refusing to start auth router');
-}
-
 // Mint a nucleus_session JWT. Used by the web cookie callback and the native
 // iOS bearer exchange — keep them in lockstep so secret/TTL/payload shape can
 // never drift. Payload carries only userId; sessionAuth re-resolves role +
