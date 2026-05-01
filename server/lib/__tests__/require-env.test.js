@@ -36,6 +36,13 @@ describe('requireEnv', () => {
     expect(() => requireEnv(['RE_TEST_A'])).toThrow(/RE_TEST_A/);
   });
 
+  test('treats whitespace-only as missing (paste-with-newline footgun)', () => {
+    process.env.RE_TEST_A = '   ';
+    expect(() => requireEnv(['RE_TEST_A'])).toThrow(/RE_TEST_A/);
+    process.env.RE_TEST_B = '\n';
+    expect(() => requireEnv(['RE_TEST_B'])).toThrow(/RE_TEST_B/);
+  });
+
   test('empty key list is a no-op', () => {
     expect(() => requireEnv([])).not.toThrow();
   });
