@@ -34,7 +34,7 @@ export default {
         /* ── Semantic states (brand-neutral; keep) ── */
         'jv-green': '#22C55E',
         'jv-red': '#DC2626',
-        'jv-blue': '#F59E0B',  /* Legacy alias → amber (prevents broken references) */
+        /* jv-blue legacy alias removed 2026-05-01; consumers migrated to jv-amber (same hex). */
 
         /* ── Text (legacy Sentinel; queued) ── */
         'jv-bone': '#F5F5F4',

@@ -1,42 +1,11 @@
-function HorizonMark({ size = 64 }) {
+function HorizonMark({ size = 72 }) {
   return (
     <div
       role="img"
       aria-label="Aunshin"
-      style={{
-        position: 'relative',
-        width: size,
-        height: size,
-        background: 'var(--color-aunshin-twilight)',
-        flexShrink: 0,
-      }}
-    >
-      <span
-        style={{
-          position: 'absolute',
-          top: '42%',
-          left: '50%',
-          width: '18.75%',
-          height: '18.75%',
-          borderRadius: '50%',
-          background: 'var(--color-aunshin-sodium)',
-          transform: 'translate(-50%, -50%)',
-          boxShadow: '0 0 18px rgba(242, 184, 106, 0.5)',
-        }}
-      />
-      <span
-        style={{
-          position: 'absolute',
-          top: '68%',
-          left: '50%',
-          width: '58%',
-          height: 1.5,
-          background: 'var(--color-aunshin-peach)',
-          opacity: 0.7,
-          transform: 'translateX(-50%)',
-        }}
-      />
-    </div>
+      className="aunshin-mark aunshin-mark--glow"
+      style={{ width: size, height: size }}
+    />
   );
 }
 
@@ -46,17 +15,13 @@ export default function Login() {
       className="flex flex-col items-center justify-center h-full px-6"
       style={{ background: 'var(--color-aunshin-twilight)' }}
     >
-      <HorizonMark size={72} />
+      <HorizonMark />
 
       <h1
-        className="mt-6 mb-1"
+        className="aunshin-display mt-6 mb-1"
         style={{
           color: 'var(--color-aunshin-peach-light)',
-          fontFamily: 'Fraunces, Georgia, serif',
-          fontWeight: 300,
           fontSize: '3rem',
-          fontVariationSettings: '"opsz" 144, "SOFT" 100',
-          letterSpacing: '-0.04em',
           lineHeight: 1,
         }}
       >
@@ -75,16 +40,12 @@ export default function Login() {
 
       <a
         href="/api/auth/login"
-        className="w-full max-w-sm flex items-center justify-center gap-3 py-3 font-semibold text-sm uppercase tracking-wider transition-colors"
+        className="aunshin-sso-primary w-full max-w-sm flex items-center justify-center gap-3 py-3 font-semibold text-sm uppercase"
         style={{
-          background: 'var(--color-aunshin-sodium)',
-          color: 'var(--color-aunshin-twilight)',
           fontFamily: 'JetBrains Mono, monospace',
           fontSize: '12px',
           letterSpacing: '0.18em',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-aunshin-sodium-deep)'; }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-aunshin-sodium)'; }}
       >
         <svg className="w-5 h-5" viewBox="0 0 21 21" fill="none">
           <rect x="1" y="1" width="9" height="9" fill="#f25022"/>

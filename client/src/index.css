@@ -11,10 +11,15 @@
   --color-aunshin-twilight-2: #4A3631;
   --color-aunshin-sodium: #F2B86A;
   --color-aunshin-sodium-deep: #D89945;
-  --color-aunshin-rule: #C99A78;
+  --color-aunshin-rule: #BC8F6A;
   --color-aunshin-rule-d: #5C392B;
   --color-aunshin-quiet: #8A6B58;
   --color-aunshin-quiet-d: #C99A78;
+
+  /* Non-color tokens (no Tailwind v3 namespace fits these) */
+  --aunshin-display-vfs: "opsz" 144, "SOFT" 100;
+  --aunshin-display-tracking: -0.04em;
+  --aunshin-shadow-sodium-glow: 0 0 18px rgba(242, 184, 106, 0.5);
 }
 
 html, body, #root {
@@ -24,26 +29,69 @@ html, body, #root {
   font-family: 'Inter', system-ui, sans-serif;
 }
 
-/* PWA safe area insets for notched devices */
 body {
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-/* Remove tap highlight on mobile */
 * {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Smooth scrolling */
 .scroll-container {
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
 }
 
-/* ── Aunshin twilight-to-sodium fade — replaces .sentinel-slit ── */
-.aunshin-fade {
-  background: linear-gradient(to right, #2D1F1C 0%, #A06343 50%, #F2B86A 100%);
+/* ── Horizon mark · pure-CSS implementation (mirrors aunshin-brand-kit/marks/horizon.css) ── */
+.aunshin-mark {
+  background: var(--color-aunshin-twilight);
+  position: relative;
+  display: inline-block;
+}
+.aunshin-mark::before {
+  content: "";
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 18.75%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--color-aunshin-sodium);
+  transform: translate(-50%, -50%);
+}
+.aunshin-mark::after {
+  content: "";
+  position: absolute;
+  top: 68%;
+  left: 50%;
+  width: 58%;
+  height: 1.5%;
+  min-height: 1px;
+  background: var(--color-aunshin-peach);
+  opacity: 0.7;
+  transform: translateX(-50%);
+}
+.aunshin-mark--glow::before {
+  box-shadow: var(--aunshin-shadow-sodium-glow);
+}
+
+/* ── Display type utility — Aunshin wordmark settings ── */
+.aunshin-display {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 300;
+  font-variation-settings: var(--aunshin-display-vfs);
+  letter-spacing: var(--aunshin-display-tracking);
+}
+
+/* ── SSO sign-in button (sodium fill, sodium-deep on hover) ── */
+.aunshin-sso-primary {
+  background: var(--color-aunshin-sodium);
+  color: var(--color-aunshin-twilight);
+  transition: background 240ms ease;
+}
+.aunshin-sso-primary:hover {
+  background: var(--color-aunshin-sodium-deep);
 }
 
 /* ── Global scrollbar — Aunshin ── */
